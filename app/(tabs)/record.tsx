@@ -103,7 +103,9 @@ export default function RecordScreen() {
     }
 
     try {
-      await audioRecorder.record();
+      // Prepare the recorder before starting
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
       setIsRecording(true);
       setIsPaused(false);
       setDuration(0);

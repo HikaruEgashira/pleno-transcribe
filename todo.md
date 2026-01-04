@@ -35,3 +35,7 @@
 ## Branding
 - [x] アプリアイコン生成
 - [x] app.config.ts更新
+
+
+## Bugs
+- [x] 録音が開始されない問題を修正（prepareToRecordAsyncを追加）
