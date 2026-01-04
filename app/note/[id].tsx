@@ -100,40 +100,80 @@ export default function NoteDetailScreen() {
       // Read audio file and convert to base64
       let audioBase64: string | undefined;
       let filename = "recording.m4a";
-      
+
       if (recording.audioUri) {
-        console.log("[Transcribe] Audio URI:", recording.audioUri);
-        
-        // Check if running on web - FileSystem is not available on web
+        console.log("[Transcribe] Audio URI:", recording.audioUri.substring(0, 100) + "...");
+
+        // Handle Web platform
         if (Platform.OS === "web") {
-          console.log("[Transcribe] Running on web - FileSystem not available");
-          // On web, we need to handle this differently
-          // For now, show a message that web transcription requires a different approach
-          throw new Error("Web版ではローカルファイルの文字起こしはサポートされていません。実機（iOS/Android）でお試しください。");
-        }
-        
-        // Import FileSystem dynamically for native platforms
-        const FileSystem = await import("expo-file-system/legacy");
-        
-        if (recording.audioUri.startsWith("file://") || !recording.audioUri.startsWith("http")) {
-          console.log("[Transcribe] Reading local file as base64...");
-          
-          // Check if file exists
-          const fileInfo = await FileSystem.getInfoAsync(recording.audioUri);
-          console.log("[Transcribe] File info:", fileInfo);
-          
-          if (!fileInfo.exists) {
-            throw new Error("音声ファイルが見つかりません: " + recording.audioUri);
+          console.log("[Transcribe] Running on web");
+
+          // Check if audioUri is already a data URL
+          if (recording.audioUri.startsWith("data:")) {
+            console.log("[Transcribe] Data URL detected - extracting base64");
+            // Extract base64 from data URL
+            const base64Data = recording.audioUri.split(',')[1];
+            if (!base64Data) {
+              throw new Error("Data URLからbase64データを抽出できませんでした");
+            }
+            console.log("[Transcribe] Base64 data length:", base64Data.length);
+            audioBase64 = base64Data;
+            filename = "recording.webm"; // Web recordings are typically webm
+          } else if (recording.audioUri.startsWith("blob:")) {
+            // Handle blob URL (fallback for older recordings)
+            console.log("[Transcribe] Blob URL detected - fetching and converting");
+            try {
+              const response = await fetch(recording.audioUri);
+              const blob = await response.blob();
+
+              // Convert blob to base64
+              const base64Data = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  const result = reader.result as string;
+                  // Remove data URL prefix (e.g., "data:audio/webm;base64,")
+                  const base64 = result.split(',')[1];
+                  resolve(base64);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              });
+
+              console.log("[Transcribe] Base64 data length:", base64Data.length);
+              audioBase64 = base64Data;
+              filename = "recording.webm";
+            } catch (webError) {
+              console.error("[Transcribe] Failed to read blob:", webError);
+              throw new Error("Blob URLからの音声データの読み込みに失敗しました");
+            }
+          } else {
+            throw new Error("未対応の音声URI形式です: " + recording.audioUri.substring(0, 50));
           }
-          
-          // Read local file as base64
-          const base64Data = await FileSystem.readAsStringAsync(recording.audioUri, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-          
-          console.log("[Transcribe] Base64 data length:", base64Data.length);
-          audioBase64 = base64Data;
-          filename = recording.audioUri.split("/").pop() || "recording.m4a";
+        } else {
+          // Handle native platforms (iOS/Android)
+          // Import FileSystem dynamically for native platforms
+          const FileSystem = await import("expo-file-system/legacy");
+
+          if (recording.audioUri.startsWith("file://") || !recording.audioUri.startsWith("http")) {
+            console.log("[Transcribe] Reading local file as base64...");
+
+            // Check if file exists
+            const fileInfo = await FileSystem.getInfoAsync(recording.audioUri);
+            console.log("[Transcribe] File info:", fileInfo);
+
+            if (!fileInfo.exists) {
+              throw new Error("音声ファイルが見つかりません: " + recording.audioUri);
+            }
+
+            // Read local file as base64
+            const base64Data = await FileSystem.readAsStringAsync(recording.audioUri, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+
+            console.log("[Transcribe] Base64 data length:", base64Data.length);
+            audioBase64 = base64Data;
+            filename = recording.audioUri.split("/").pop() || "recording.m4a";
+          }
         }
       }
 
@@ -142,16 +182,16 @@ export default function NoteDetailScreen() {
       }
 
       console.log("[Transcribe] Sending to API with base64 length:", audioBase64.length);
-      
+
       const result = await transcribeMutation.mutateAsync({
         audioBase64,
         filename,
         languageCode: "ja",
         diarize: true,
       });
-      
+
       console.log("[Transcribe] Result:", result);
-      
+
       if (result.text) {
         setTranscript(recording.id, {
           text: result.text,

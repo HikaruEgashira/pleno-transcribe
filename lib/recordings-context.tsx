@@ -146,7 +146,9 @@ export function RecordingsProvider({ children }: { children: React.ReactNode }) 
 
   const saveRecordings = async (recordings: Recording[]) => {
     try {
+      console.log('Saving recordings to AsyncStorage:', recordings.length, 'items');
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(recordings));
+      console.log('Recordings saved successfully');
     } catch (error) {
       console.error('Failed to save recordings:', error);
     }

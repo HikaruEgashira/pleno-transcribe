@@ -36,6 +36,11 @@ export const appRouter = router({
         numSpeakers: z.number().min(1).max(32).optional(),
       }))
       .mutation(async ({ input }) => {
+        console.log("[TRPC] transcribe mutation called");
+        console.log("[TRPC] filename:", input.filename);
+        console.log("[TRPC] audioBase64 length:", input.audioBase64?.length || 0);
+        console.log("[TRPC] audioUrl:", input.audioUrl || "none");
+
         try {
           const options: TranscriptionOptions = {
             languageCode: input.languageCode,

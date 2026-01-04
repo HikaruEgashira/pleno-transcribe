@@ -163,28 +163,67 @@ export default function RecordScreen() {
         return;
       }
 
-      // Generate unique filename
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const filename = `recording_${timestamp}.m4a`;
-      const newUri = `${FileSystem.documentDirectory}recordings/${filename}`;
+      console.log("Recording stopped, URI:", uri);
 
-      // Ensure directory exists
-      await FileSystem.makeDirectoryAsync(`${FileSystem.documentDirectory}recordings/`, {
-        intermediates: true,
-      });
+      let finalUri = uri;
+      let audioBase64: string | undefined;
 
-      // Move file to permanent location
-      await FileSystem.moveAsync({
-        from: uri,
-        to: newUri,
-      });
+      // On Web, convert blob to base64 and store it
+      // Blob URLs are temporary and won't work after page reload
+      if (Platform.OS === "web") {
+        console.log("Web platform - converting blob to base64 for storage");
+        try {
+          const response = await fetch(uri);
+          const blob = await response.blob();
+
+          // Convert blob to base64
+          const base64Data = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const result = reader.result as string;
+              // Remove data URL prefix (e.g., "data:audio/webm;base64,")
+              const base64 = result.split(',')[1];
+              resolve(base64);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+
+          console.log("Base64 conversion completed, length:", base64Data.length);
+          audioBase64 = base64Data;
+          // Use data URL for web storage
+          finalUri = `data:audio/webm;base64,${base64Data}`;
+        } catch (webError) {
+          console.error("Failed to convert blob to base64:", webError);
+          throw new Error("録音データの変換に失敗しました");
+        }
+      } else {
+        // Native platforms: move file to permanent location
+        // Generate unique filename
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        const filename = `recording_${timestamp}.m4a`;
+        const newUri = `${FileSystem.documentDirectory}recordings/${filename}`;
+
+        // Ensure directory exists
+        await FileSystem.makeDirectoryAsync(`${FileSystem.documentDirectory}recordings/`, {
+          intermediates: true,
+        });
+
+        // Move file to permanent location
+        await FileSystem.moveAsync({
+          from: uri,
+          to: newUri,
+        });
+
+        finalUri = newUri;
+      }
 
       // Create recording object
       const now = new Date();
       const newRecording: Recording = {
         id: Date.now().toString(),
         title: `録音 ${now.toLocaleDateString("ja-JP")} ${now.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`,
-        audioUri: newUri,
+        audioUri: finalUri,
         duration: Math.floor(duration),
         createdAt: now,
         updatedAt: now,
@@ -194,7 +233,9 @@ export default function RecordScreen() {
         status: "saved",
       };
 
+      console.log("Adding recording:", newRecording.id);
       await addRecording(newRecording);
+      console.log("Recording added successfully");
 
       // Reset state
       setDuration(0);
