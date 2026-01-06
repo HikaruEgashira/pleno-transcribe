@@ -176,10 +176,18 @@ export function RecordingsProvider({ children }: { children: React.ReactNode }) 
 
   const saveRecordings = async (recordings: Recording[]) => {
     try {
-      console.log('Saving recordings to AsyncStorage:', recordings.length, 'items');
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(recordings));
+      // realtimeTranscriptは一時データなので保存から除外
+      const recordingsToSave = recordings.map(({ realtimeTranscript, ...rest }) => rest);
+      const data = JSON.stringify(recordingsToSave);
+      const sizeKB = Math.round(data.length / 1024);
+      console.log(`Saving recordings to AsyncStorage: ${recordings.length} items, ${sizeKB}KB`);
+
+      await AsyncStorage.setItem(STORAGE_KEY, data);
       console.log('Recordings saved successfully');
     } catch (error) {
+      if (error instanceof Error && error.name === 'QuotaExceededError') {
+        console.warn('Storage quota exceeded. Consider cleaning up old recordings.');
+      }
       console.error('Failed to save recordings:', error);
     }
   };
