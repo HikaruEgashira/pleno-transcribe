@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useCallback } from "react";
 import {
   Text,
   View,
@@ -19,7 +19,6 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useRecordings } from "@/lib/recordings-context";
 import { useColors } from "@/hooks/use-colors";
 import { Recording } from "@/types/recording";
-import { cn } from "@/lib/utils";
 
 function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -68,12 +67,12 @@ interface RecordingCardProps {
   onDelete: () => void;
 }
 
-function RecordingCard({ recording, onPress, onDelete }: RecordingCardProps) {
+const RecordingCard = React.memo(function RecordingCard({ recording, onPress, onDelete }: RecordingCardProps) {
   const colors = useColors();
   const statusInfo = getStatusLabel(recording.status);
   const swipeableRef = useRef<Swipeable>(null);
 
-  const handleLongPress = () => {
+  const handleLongPress = useCallback(() => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -81,9 +80,9 @@ function RecordingCard({ recording, onPress, onDelete }: RecordingCardProps) {
       { text: "キャンセル", style: "cancel" },
       { text: "削除", style: "destructive", onPress: onDelete },
     ]);
-  };
+  }, [recording.title, onDelete]);
 
-  const handleDelete = () => {
+  const handleDelete = useCallback(() => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -91,7 +90,7 @@ function RecordingCard({ recording, onPress, onDelete }: RecordingCardProps) {
       { text: "キャンセル", style: "cancel", onPress: () => swipeableRef.current?.close() },
       { text: "削除", style: "destructive", onPress: onDelete },
     ]);
-  };
+  }, [recording.title, onDelete]);
 
   const renderRightActions = (
     progress: RNAnimated.AnimatedInterpolation<number>,
@@ -193,7 +192,17 @@ function RecordingCard({ recording, onPress, onDelete }: RecordingCardProps) {
       {cardContent}
     </Swipeable>
   );
-}
+}, (prevProps, nextProps) => {
+  // onPress/onDeleteは毎回新規生成されるので、recordingの実質的な変化のみを比較
+  return (
+    prevProps.recording.id === nextProps.recording.id &&
+    prevProps.recording.status === nextProps.recording.status &&
+    prevProps.recording.title === nextProps.recording.title &&
+    prevProps.recording.duration === nextProps.recording.duration &&
+    prevProps.recording.highlights.length === nextProps.recording.highlights.length &&
+    prevProps.recording.transcript?.text === nextProps.recording.transcript?.text
+  );
+});
 
 export default function HomeScreen() {
   const router = useRouter();
