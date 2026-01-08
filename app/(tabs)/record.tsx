@@ -1,29 +1,18 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import {
   Text,
   View,
   TouchableOpacity,
   StyleSheet,
-  Platform,
-  Alert,
   Animated,
   ScrollView,
 } from "react-native";
-import { useRouter, useFocusEffect } from "expo-router";
-import { useAudioRecorder, RecordingPresets, AudioModule, setAudioModeAsync } from "expo-audio";
 import { useKeepAwake } from "expo-keep-awake";
-import * as FileSystem from "expo-file-system/legacy";
-import * as Haptics from "expo-haptics";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { useRecordings } from "@/lib/recordings-context";
 import { useColors } from "@/hooks/use-colors";
-import { Recording, Highlight } from "@/types/recording";
-import { useRealtimeTranscription } from "@/hooks/use-realtime-transcription";
-
-const RECORDING_OPTIONS = RecordingPresets.HIGH_QUALITY;
+import { useRecordingSession } from "@/lib/recording-session-context";
 
 function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -33,402 +22,41 @@ function formatTime(seconds: number): string {
 }
 
 export default function RecordScreen() {
-  const router = useRouter();
   const colors = useColors();
-  const { addRecording, updateRealtimeTranscript, setTranscript } = useRecordings();
-
-  const [isRecording, setIsRecording] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [duration, setDuration] = useState(0);
-  const [highlights, setHighlights] = useState<Highlight[]>([]);
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [realtimeEnabled, setRealtimeEnabled] = useState(false);
-  const [currentRecordingId, setCurrentRecordingId] = useState<string | null>(null);
-  const [hasAutoStarted, setHasAutoStarted] = useState(false);
-
-  const justCompletedRef = useRef(false);
-  const isStartingRef = useRef(false);
-
-  const audioRecorder = useAudioRecorder(RECORDING_OPTIONS);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Realtime transcription hook
   const {
-    state: realtimeState,
-    startSession: startRealtimeSession,
-    stopSession: stopRealtimeSession,
-    consolidateSegments,
+    state,
+    pulseAnim,
+    realtimeState,
     mergedSegments,
-  } = useRealtimeTranscription();
+    startRecording,
+    tryAutoStartOnFirstLaunch,
+  } = useRecordingSession();
+
+  const {
+    isRecording,
+    isPaused,
+    duration,
+    hasPermission,
+    realtimeEnabled,
+    meteringHistory,
+  } = state;
 
   // Keep screen awake during recording
   useKeepAwake();
 
-  useFocusEffect(
-    useCallback(() => {
-      // 録音完了後から戻ってきた場合はフラグをリセットするのみ
-      if (justCompletedRef.current) {
-        justCompletedRef.current = false;
-        // クリーンアップは必ず返す（次のタブ移動でhasAutoStartedをリセットするため）
-      }
-
-      return () => {
-        // 他のタブに移動する時のみhasAutoStartedをリセット
-        // 録音完了後のノート詳細への遷移時はリセットしない
-        if (!justCompletedRef.current) {
-          setHasAutoStarted(false);
-        }
-      };
-    }, [])
-  );
-
-  // Load settings
+  // Auto-start recording only on first app launch
   useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const saved = await AsyncStorage.getItem("app-settings");
-        if (saved) {
-          const settings = JSON.parse(saved);
-          setRealtimeEnabled(settings.realtimeTranscription?.enabled || false);
-        }
-      } catch (error) {
-        console.error("Failed to load settings:", error);
-      }
-    };
-    loadSettings();
-  }, []);
+    tryAutoStartOnFirstLaunch();
+  }, [tryAutoStartOnFirstLaunch]);
 
-  // Request microphone permission and set audio mode for background recording
-  useEffect(() => {
-    (async () => {
-      // Set audio mode for background recording
-      await setAudioModeAsync({
-        playsInSilentMode: true,
-        allowsRecording: true,
-        shouldPlayInBackground: true,
-        allowsBackgroundRecording: true,
-      });
-      
-      const status = await AudioModule.requestRecordingPermissionsAsync();
-      setHasPermission(status.granted);
-    })();
-  }, []);
-
-  // Timer for duration
-  useEffect(() => {
-    if (isRecording && !isPaused) {
-      timerRef.current = setInterval(() => {
-        setDuration((prev) => prev + 0.1);
-      }, 100);
-    } else {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    }
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-  }, [isRecording, isPaused]);
-
-  // Pulse animation for recording indicator
-  useEffect(() => {
-    if (isRecording && !isPaused) {
-      const pulse = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.2,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      pulse.start();
-      return () => pulse.stop();
-    } else {
-      pulseAnim.setValue(1);
-    }
-  }, [isRecording, isPaused, pulseAnim]);
-
-  // Sync realtime transcript to context
-  useEffect(() => {
-    if (currentRecordingId && realtimeState.segments.length > 0) {
-      updateRealtimeTranscript(currentRecordingId, realtimeState.segments);
-    }
-  }, [currentRecordingId, realtimeState.segments, updateRealtimeTranscript]);
-
+  // Auto-scroll realtime transcript
   useEffect(() => {
     if (realtimeState.segments.length > 0 && scrollViewRef.current) {
       scrollViewRef.current.scrollToEnd({ animated: true });
     }
   }, [realtimeState.segments]);
-
-  const handleStartRecording = useCallback(async () => {
-    if (isStartingRef.current || isRecording) {
-      return;
-    }
-    isStartingRef.current = true;
-
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-
-    try {
-      // Prepare the recorder before starting
-      await audioRecorder.prepareToRecordAsync();
-      audioRecorder.record();
-      setIsRecording(true);
-      setIsPaused(false);
-      setDuration(0);
-      setHighlights([]);
-
-      // Create temporary recording ID for realtime transcription
-      const recordingId = Date.now().toString();
-      setCurrentRecordingId(recordingId);
-
-      // Start realtime transcription if enabled
-      if (realtimeEnabled) {
-        try {
-          await startRealtimeSession(recordingId);
-          console.log("Realtime transcription session started");
-        } catch (error) {
-          console.error("Failed to start realtime session:", error);
-          // Continue recording even if realtime fails
-        }
-      }
-      isStartingRef.current = false;
-    } catch (error) {
-      console.error("Failed to start recording:", error);
-      isStartingRef.current = false;
-      Alert.alert("エラー", "録音を開始できませんでした");
-    }
-  }, [audioRecorder, realtimeEnabled, startRealtimeSession, isRecording]);
-
-  useEffect(() => {
-    if (hasPermission && !hasAutoStarted && !isRecording) {
-      setHasAutoStarted(true);
-      handleStartRecording();
-    }
-  }, [hasPermission, hasAutoStarted, isRecording, handleStartRecording]);
-
-  const handlePauseResume = useCallback(async () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-
-    try {
-      if (isPaused) {
-        await audioRecorder.record();
-        setIsPaused(false);
-      } else {
-        audioRecorder.pause();
-        setIsPaused(true);
-      }
-    } catch (error) {
-      console.error("Failed to pause/resume:", error);
-    }
-  }, [audioRecorder, isPaused]);
-
-  const handleStopRecording = useCallback(async () => {
-    if (Platform.OS !== "web") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-
-    // 録音完了フラグを最初に設定（非同期処理の前に）
-    justCompletedRef.current = true;
-
-    try {
-      // Stop realtime transcription session
-      if (realtimeEnabled && currentRecordingId) {
-        try {
-          await stopRealtimeSession();
-          console.log("Realtime transcription session stopped");
-        } catch (error) {
-          console.error("Failed to stop realtime session:", error);
-        }
-      }
-
-      await audioRecorder.stop();
-      setIsRecording(false);
-      setIsPaused(false);
-
-      const uri = audioRecorder.uri;
-      if (!uri) {
-        Alert.alert("エラー", "録音ファイルが見つかりません");
-        return;
-      }
-
-      console.log("Recording stopped, URI:", uri);
-
-      let finalUri = uri;
-
-      // On Web, convert blob to base64 and store it
-      // Blob URLs are temporary and won't work after page reload
-      if (Platform.OS === "web") {
-        console.log("Web platform - converting blob to base64 for storage");
-        try {
-          const response = await fetch(uri);
-          const blob = await response.blob();
-
-          // Convert blob to base64
-          const base64Data = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              const result = reader.result as string;
-              // Remove data URL prefix (e.g., "data:audio/webm;base64,")
-              const base64 = result.split(',')[1];
-              resolve(base64);
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-          });
-
-          console.log("Base64 conversion completed, length:", base64Data.length);
-          // Use data URL for web storage
-          finalUri = `data:audio/webm;base64,${base64Data}`;
-        } catch (webError) {
-          console.error("Failed to convert blob to base64:", webError);
-          throw new Error("録音データの変換に失敗しました");
-        }
-      } else {
-        // Native platforms: move file to permanent location
-        // Generate unique filename
-        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-        const filename = `recording_${timestamp}.m4a`;
-        const newUri = `${FileSystem.documentDirectory}recordings/${filename}`;
-
-        // Ensure directory exists
-        await FileSystem.makeDirectoryAsync(`${FileSystem.documentDirectory}recordings/`, {
-          intermediates: true,
-        });
-
-        // Move file to permanent location
-        await FileSystem.moveAsync({
-          from: uri,
-          to: newUri,
-        });
-
-        finalUri = newUri;
-      }
-
-      // Create recording object
-      const now = new Date();
-      const recordingId = currentRecordingId || Date.now().toString();
-      const newRecording: Recording = {
-        id: recordingId,
-        title: `録音 ${now.toLocaleDateString("ja-JP")} ${now.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`,
-        audioUri: finalUri,
-        duration: Math.floor(duration),
-        createdAt: now,
-        updatedAt: now,
-        highlights,
-        notes: "",
-        qaHistory: [],
-        status: "saved",
-      };
-
-      console.log("Adding recording:", newRecording.id);
-      await addRecording(newRecording);
-      console.log("Recording added successfully");
-
-      // Save realtime transcription result if available
-      if (realtimeEnabled && realtimeState.segments.length > 0) {
-        const realtimeText = consolidateSegments();
-        if (realtimeText.trim()) {
-          console.log("Saving realtime transcription result:", realtimeText.substring(0, 100));
-          // Convert realtime segments to Transcript format
-          const transcriptSegments = realtimeState.segments
-            .filter((s) => !s.isPartial)
-            .map((s) => ({
-              text: s.text,
-              startTime: s.timestamp,
-              endTime: s.timestamp, // リアルタイムでは終了時間が不明
-              speaker: s.speaker,
-            }));
-          await setTranscript(recordingId, {
-            text: realtimeText,
-            segments: transcriptSegments,
-            language: "ja",
-            processedAt: now,
-          });
-        }
-      }
-
-      // Reset state
-      setDuration(0);
-      setHighlights([]);
-      setCurrentRecordingId(null);
-      isStartingRef.current = false;
-
-      // Navigate to note detail
-      router.push(`/note/${newRecording.id}`);
-    } catch (error) {
-      console.error("Failed to stop recording:", error);
-      Alert.alert("エラー", "録音の保存に失敗しました");
-      // エラー時はフラグをリセット（再録音できるように）
-      justCompletedRef.current = false;
-      isStartingRef.current = false;
-    }
-  }, [audioRecorder, duration, highlights, addRecording, router, currentRecordingId, realtimeEnabled, stopRealtimeSession, realtimeState.segments, consolidateSegments, setTranscript]);
-
-  const handleAddHighlight = useCallback(() => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    }
-
-    const newHighlight: Highlight = {
-      id: Date.now().toString(),
-      timestamp: duration,
-    };
-    setHighlights((prev) => [...prev, newHighlight]);
-  }, [duration]);
-
-  const handleCancelRecording = useCallback(async () => {
-    if (Platform.OS !== "web") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    }
-
-    justCompletedRef.current = true;
-
-    try {
-      // Stop realtime transcription session
-      if (realtimeEnabled && currentRecordingId) {
-        try {
-          await stopRealtimeSession();
-        } catch (error) {
-          console.error("Failed to stop realtime session:", error);
-        }
-      }
-
-      // Stop recorder without saving
-      await audioRecorder.stop();
-
-      setIsRecording(false);
-      setIsPaused(false);
-      setDuration(0);
-      setHighlights([]);
-      setCurrentRecordingId(null);
-      isStartingRef.current = false;
-    } catch (error) {
-      console.error("Failed to cancel recording:", error);
-      setIsRecording(false);
-      setIsPaused(false);
-      setDuration(0);
-      setHighlights([]);
-      setCurrentRecordingId(null);
-      isStartingRef.current = false;
-    }
-  }, [audioRecorder, realtimeEnabled, currentRecordingId, stopRealtimeSession]);
 
   if (hasPermission === null) {
     return (
@@ -482,21 +110,28 @@ export default function RecordScreen() {
           <Text style={[styles.timer, { color: colors.foreground }]}>{formatTime(duration)}</Text>
         </View>
 
-        {/* Waveform placeholder */}
+        {/* Waveform */}
         <View style={[styles.waveform, { backgroundColor: colors.surface }]}>
           <View style={styles.waveformBars}>
-            {Array.from({ length: 50 }).map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.waveformBar,
-                  {
-                    backgroundColor: isRecording && !isPaused ? colors.primary : colors.border,
-                    height: isRecording && !isPaused ? 10 + Math.random() * 50 : 20,
-                  },
-                ]}
-              />
-            ))}
+            {Array.from({ length: 50 }).map((_, i) => {
+              const metering = meteringHistory[i] ?? -160;
+              // -30dB〜0dBを0〜1にマッピング、pow(1.3)でコントラスト強調
+              const value = Math.max(0, Math.min(1, (metering + 30) / 30));
+              const normalizedHeight = Math.pow(value, 1.3);
+              const barHeight = isRecording && !isPaused ? 8 + normalizedHeight * 52 : 20;
+              return (
+                <View
+                  key={i}
+                  style={[
+                    styles.waveformBar,
+                    {
+                      backgroundColor: isRecording && !isPaused ? colors.primary : colors.border,
+                      height: barHeight,
+                    },
+                  ]}
+                />
+              );
+            })}
           </View>
         </View>
 
@@ -581,7 +216,7 @@ export default function RecordScreen() {
         {!isRecording && (
           <View style={styles.controls}>
             <TouchableOpacity
-              onPress={handleStartRecording}
+              onPress={startRecording}
               style={[styles.recordButton, { backgroundColor: colors.primary }]}
               activeOpacity={0.8}
             >
@@ -593,38 +228,6 @@ export default function RecordScreen() {
           </View>
         )}
       </View>
-
-      {/* Minimal player controls - Recording */}
-      {isRecording && (
-        <View style={styles.playerBar}>
-          <View style={styles.playerControls}>
-            <TouchableOpacity onPress={handleCancelRecording} style={styles.iconButton}>
-              <IconSymbol name="xmark" size={20} color={colors.muted} />
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={handleAddHighlight} style={styles.iconButton}>
-              <IconSymbol name="star" size={20} color={colors.highlight} />
-              {highlights.length > 0 && (
-                <View style={[styles.badge, { backgroundColor: colors.highlight }]}>
-                  <Text style={styles.badgeText}>{highlights.length}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={handlePauseResume} style={styles.mainButton}>
-              <IconSymbol
-                name={isPaused ? "play.fill" : "pause.fill"}
-                size={28}
-                color={colors.foreground}
-              />
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={handleStopRecording} style={styles.iconButton}>
-              <IconSymbol name="checkmark" size={20} color={colors.foreground} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
     </ScreenContainer>
   );
 }
@@ -633,6 +236,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 20,
+    paddingBottom: 72,
   },
   centered: {
     flex: 1,
@@ -721,47 +325,8 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 14,
   },
-  playerBar: {
-    paddingVertical: 20,
-    paddingHorizontal: 24,
-  },
-  playerControls: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 32,
-  },
-  iconButton: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  mainButton: {
-    width: 64,
-    height: 64,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  badge: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 4,
-  },
-  badgeText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "700",
-  },
   realtimeSection: {
     marginTop: 16,
-    marginBottom: 16,
     borderRadius: 12,
     borderWidth: 1,
     padding: 12,

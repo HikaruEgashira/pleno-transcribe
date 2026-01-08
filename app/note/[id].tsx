@@ -21,6 +21,7 @@ import { useRecordings } from "@/lib/recordings-context";
 import { useColors } from "@/hooks/use-colors";
 import { QAMessage } from "@/types/recording";
 import { trpc } from "@/lib/trpc";
+import { GlobalRecordingBar } from "@/components/global-recording-bar";
 
 type TabType = "audio" | "transcript" | "summary" | "qa";
 
@@ -403,24 +404,27 @@ const handleSummarize = async () => {
         <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
           {activeTab === "audio" && (
             <View style={styles.audioTab}>
-              {/* Waveform placeholder */}
+              {/* Waveform */}
               <View style={[styles.waveform, { backgroundColor: colors.surface }]}>
                 <View style={styles.waveformBars}>
-                  {Array.from({ length: 40 }).map((_, i) => (
-                    <View
-                      key={i}
-                      style={[
-                        styles.waveformBar,
-                        {
-                          backgroundColor:
-                            i / 40 < currentTime / recording.duration
-                              ? colors.primary
-                              : colors.border,
-                          height: 20 + Math.random() * 40,
-                        },
-                      ]}
-                    />
-                  ))}
+                  {Array.from({ length: 40 }).map((_, i) => {
+                    const waveformValue = recording.waveformData?.[i] ?? 0.1;
+                    return (
+                      <View
+                        key={i}
+                        style={[
+                          styles.waveformBar,
+                          {
+                            backgroundColor:
+                              i / 40 < currentTime / recording.duration
+                                ? colors.primary
+                                : colors.border,
+                            height: 20 + waveformValue * 40,
+                          },
+                        ]}
+                      />
+                    );
+                  })}
                 </View>
               </View>
 
@@ -663,6 +667,7 @@ const handleSummarize = async () => {
             </TouchableOpacity>
           </View>
         )}
+        <GlobalRecordingBar />
       </KeyboardAvoidingView>
     </ScreenContainer>
   );

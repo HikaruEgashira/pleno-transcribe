@@ -4,7 +4,7 @@ import type { ExpoConfig } from "expo/config";
 
 // Bundle ID format: space.manus.<project_name_dots>.<timestamp>
 // e.g., "my-app" created at 2024-01-15 10:30:45 -> "space.manus.my.app.t20240115103045"
-const bundleId = "space.manus.voicenote.note.alt.t20260104015453";
+const bundleId = "space.manus.voicekeep.alt.t20260104015453";
 // Extract timestamp from bundle ID and prefix with "manus" for deep link scheme
 // e.g., "space.manus.my.app.t20240115103045" -> "manus20240115103045"
 const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";
@@ -12,7 +12,7 @@ const schemeFromBundleId = `manus${timestamp}`;
 
 const env = {
   // App branding - update these values directly (do not use env vars)
-  appName: "VoiceNote AI",
+  appName: "VoiceKeep",
   appSlug: "voicenote-note-alt",
   // S3 URL of the app logo - set this to the URL returned by generate_image when creating custom logo
   // Leave empty to use the default icon from assets/images/icon.png
@@ -32,6 +32,12 @@ const config: ExpoConfig = {
       projectId: "eb6a1db1-3fdc-45fd-b354-c135b2313a6c",
     },
   },
+  updates: {
+    url: "https://u.expo.dev/eb6a1db1-3fdc-45fd-b354-c135b2313a6c",
+  },
+  runtimeVersion: {
+    policy: "appVersion",
+  },
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: env.scheme,
@@ -43,6 +49,7 @@ const config: ExpoConfig = {
     infoPlist: {
       UIBackgroundModes: ["audio"],
       NSMicrophoneUsageDescription: "音声録音のためにマイクへのアクセスが必要です。",
+      ITSAppUsesNonExemptEncryption: false,
     },
   },
   android: {

@@ -1,6 +1,7 @@
 import serverlessExpress from "@codegenie/serverless-express";
 import express, { Request, Response, NextFunction } from "express";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
+import type { APIGatewayProxyEvent, Context, Callback } from "aws-lambda";
 import { appRouter } from "./routers";
 import { createContext } from "./_core/context";
 
@@ -43,6 +44,6 @@ app.use(
 
 const serverlessExpressInstance = serverlessExpress({ app });
 
-export const handler = (event: unknown, context: unknown) => {
-  return serverlessExpressInstance(event, context);
+export const handler = (event: APIGatewayProxyEvent, context: Context, callback: Callback) => {
+  return serverlessExpressInstance(event, context, callback);
 };
