@@ -6,6 +6,6 @@
 
 Android APKをダウンロード:
 
-![QR Code](https://github.com/HikaruEgashira/voicenote-ai/releases/download/v1.0.0/qr-code.png)
+![QR Code](https://github.com/HikaruEgashira/voicenote-ai/releases/download/v1.1.0/qr-code.png)
 
-[Download APK](https://github.com/HikaruEgashira/voicenote-ai/releases/download/v1.0.0/VoiceKeep.apk)
+[Download APK](https://github.com/HikaruEgashira/voicenote-ai/releases/download/v1.1.0/VoiceKeep.apk)
