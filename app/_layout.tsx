@@ -88,7 +88,6 @@ export default function RootLayout() {
             <RecordingSessionProvider>
               <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="(tabs)" />
-                <Stack.Screen name="oauth/callback" />
                 <Stack.Screen name="note/[id]" options={{ presentation: 'card' }} />
               </Stack>
               <StatusBar style="auto" />
