@@ -1,8 +1,8 @@
-# Pleno Transcribe - Design Document
+# Pleno Live - Design Document
 
 ## Overview
 
-音声録音、AI文字起こし、要約、Q&A機能を備えたモバイルアプリ。Pleno Transcribeの主要機能をReact Native/Expoで実装する。
+音声録音、AI文字起こし、要約、Q&A機能を備えたモバイルアプリ。Pleno Liveの主要機能をReact Native/Expoで実装する。
 
 ## Screen List
 

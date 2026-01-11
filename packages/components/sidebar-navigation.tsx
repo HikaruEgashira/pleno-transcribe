@@ -43,7 +43,7 @@ export function SidebarNavigation() {
     >
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.foreground }]}>
-          Pleno Transcribe
+          Pleno Live
         </Text>
       </View>
 

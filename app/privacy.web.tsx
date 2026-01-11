@@ -99,7 +99,7 @@ export default function PrivacyPage() {
           <div className="rounded-xl border border-border bg-surface p-6">
             <p className="text-muted">
               Pleno
-              Transcribe（以下「本アプリ」）は、ユーザーのプライバシーを最優先に設計されています。
+              Live（以下「本アプリ」）は、ユーザーのプライバシーを最優先に設計されています。
               本プライバシーポリシーでは、本アプリがどのようにデータを収集、使用、保護するかについて説明します。
             </p>
           </div>
