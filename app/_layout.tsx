@@ -94,18 +94,24 @@ export default function RootLayout() {
 
   const stack = (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="note/[id]" options={{ presentation: "card" }} />
-      <Stack.Screen name="website" />
+      <Stack.Screen name="index" />
+      <Stack.Screen name="(tabs)" options={{ lazy: true }} />
+      <Stack.Screen name="note/[id]" options={{ presentation: "card", lazy: true }} />
+      <Stack.Screen name="website" options={{ lazy: true }} />
     </Stack>
   );
 
-  // All routes need AppProviders because Expo Router preloads all routes
-  const content = (
+  // ウェブのランディングページではAppProvidersをスキップ（音声許可を求めない）
+  const content = isWebLanding ? (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      {stack}
+      <StatusBar style="dark" />
+    </GestureHandlerRootView>
+  ) : (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AppProviders>
         {stack}
-        <StatusBar style={isWebLanding ? "dark" : "auto"} />
+        <StatusBar style="auto" />
       </AppProviders>
     </GestureHandlerRootView>
   );
