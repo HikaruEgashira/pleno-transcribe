@@ -227,38 +227,46 @@ export default function VoiceMemoLanding() {
 
       <div className="relative z-10">
         {/* Header */}
-        <header className="container mx-auto px-6 py-6">
-          <nav className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <Mic className="w-5 h-5 text-white" />
+        <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
+          <div className="container mx-auto px-6">
+            <nav className="flex items-center justify-between h-14">
+              <a href="/website" className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+                  <Mic className="w-5 h-5 text-white" />
+                </div>
+                <span className="text-xl font-semibold text-foreground">
+                  Pleno Transcribe
+                </span>
+              </a>
+              <div className="hidden md:flex items-center gap-6">
+                <a href="#features" className="text-muted hover:text-foreground transition-colors">
+                  Features
+                </a>
+                <a href="/website/docs" className="text-muted hover:text-foreground transition-colors">
+                  Docs
+                </a>
+                <a
+                  href={GITHUB_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-background hover:bg-surface transition-colors"
+                >
+                  <Github className="h-4 w-4 text-foreground" />
+                  <span className="text-sm font-medium text-foreground">GitHub</span>
+                  {starCount !== null && (
+                    <span className="flex items-center gap-1 text-sm text-muted">
+                      <Star className="h-3 w-3" />
+                      {starCount}
+                    </span>
+                  )}
+                </a>
               </div>
-              <span className="text-xl font-semibold text-foreground">
-                Pleno Transcribe
-              </span>
-            </div>
-            <div className="hidden md:flex items-center gap-8">
-              <a href="#features" className="text-muted hover:text-foreground transition-colors">
-                Features
-              </a>
-              <a href="/website/docs" className="text-muted hover:text-foreground transition-colors">
-                Docs
-              </a>
-              <a
-                href="https://github.com/HikaruEgashira/pleno-transcribe/releases"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button variant="outline" size="default">
-                  Download App
-                </Button>
-              </a>
-            </div>
-          </nav>
+            </nav>
+          </div>
         </header>
 
         {/* Hero Section */}
-        <section className="container mx-auto px-6 pt-12 pb-16 md:pt-24 md:pb-24">
+        <section className="container mx-auto px-6 pt-24 pb-16 md:pt-32 md:pb-24">
           <div className="max-w-4xl mx-auto">
             <div className="text-center mb-16">
               <motion.div
@@ -303,10 +311,15 @@ export default function VoiceMemoLanding() {
                 animate="visible"
                 className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16"
               >
-                <Button size="lg">Get Started Free</Button>
-                <Button size="lg" variant="outline">
-                  Watch Demo
-                </Button>
+                <a href={`${GITHUB_URL}/releases`} target="_blank" rel="noopener noreferrer">
+                  <Button size="lg">Download App</Button>
+                </a>
+                <a href="/website/docs">
+                  <Button size="lg" variant="outline">
+                    Learn More
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </a>
               </motion.div>
 
               <motion.div
@@ -416,41 +429,66 @@ export default function VoiceMemoLanding() {
               knowledge
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Button size="lg">Start Free Trial</Button>
-              <Button size="lg" variant="outline">
-                Contact Sales
-              </Button>
+              <a href={`${GITHUB_URL}/releases`} target="_blank" rel="noopener noreferrer">
+                <Button size="lg">Download App</Button>
+              </a>
+              <a href="/website/docs">
+                <Button size="lg" variant="outline">
+                  Read Docs
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </a>
             </div>
           </motion.div>
         </section>
 
         {/* Footer */}
-        <footer className="container mx-auto px-6 py-12 border-t border-border">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md bg-primary flex items-center justify-center">
-                <Mic className="w-4 h-4 text-white" />
+        <footer className="border-t border-border py-12">
+          <div className="container mx-auto px-6">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-md bg-primary flex items-center justify-center">
+                    <Mic className="w-4 h-4 text-white" />
+                  </div>
+                  <span className="text-sm font-medium text-foreground">
+                    Pleno Transcribe
+                  </span>
+                </div>
+                <a
+                  href={GITHUB_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-2 rounded-lg hover:bg-surface transition-colors"
+                  aria-label="GitHub"
+                >
+                  <Github className="h-5 w-5 text-muted hover:text-foreground" />
+                </a>
               </div>
-              <span className="text-sm font-medium text-foreground">
-                Pleno Transcribe
-              </span>
-            </div>
-            <div className="flex items-center gap-6 text-sm text-muted">
-              <a
-                href="/website/docs"
-                className="hover:text-foreground transition-colors"
-              >
-                Docs
-              </a>
-              <a
-                href="https://github.com/HikaruEgashira/pleno-transcribe"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-foreground transition-colors"
-              >
-                GitHub
-              </a>
-              <span>© 2025 Pleno Transcribe</span>
+              <div className="flex items-center gap-6 text-sm text-muted">
+                <a
+                  href="/website/docs"
+                  className="hover:text-foreground transition-colors"
+                >
+                  Docs
+                </a>
+                <a
+                  href="https://natbee.pages.dev/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-foreground transition-colors"
+                >
+                  About
+                </a>
+                <a
+                  href={`${GITHUB_URL}/releases`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-foreground transition-colors"
+                >
+                  Download
+                </a>
+              </div>
             </div>
           </div>
         </footer>
