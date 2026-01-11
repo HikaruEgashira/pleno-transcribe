@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Mic, Zap, Clock, Shield } from "lucide-react";
+import { Mic, Zap, Clock, Shield, Github, Star, ArrowRight } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/packages/lib/cn";
 
@@ -154,8 +154,22 @@ const features = [
   },
 ];
 
+const GITHUB_URL = "https://github.com/HikaruEgashira/pleno-transcribe";
+
 export default function VoiceMemoLanding() {
   const [isRecording, setIsRecording] = useState(false);
+  const [starCount, setStarCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch("https://api.github.com/repos/HikaruEgashira/pleno-transcribe")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.stargazers_count !== undefined) {
+          setStarCount(data.stargazers_count);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const fadeUpVariants = {
     hidden: { opacity: 0, y: 30 },

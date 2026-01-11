@@ -13,7 +13,8 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const segments = useSegments();
   const isWebsite = segments[0] === "website";
-  const bottomPadding = Platform.OS === "web" ? 12 : Math.max(insets.bottom, 8);
+  const isWeb = Platform.OS === "web";
+  const bottomPadding = isWeb ? 12 : Math.max(insets.bottom, 8);
   const tabBarHeight = 56 + bottomPadding;
 
   // Skip RecordingSessionProvider for website route
@@ -21,8 +22,7 @@ export default function TabLayout() {
     return null;
   }
 
-  return (
-    <RecordingSessionProvider>
+  const tabsContent = (
       <View style={styles.container}>
         <Tabs
           initialRouteName="record"
@@ -65,10 +65,22 @@ export default function TabLayout() {
             }}
           />
         </Tabs>
-        <View style={[styles.recordingBarContainer, { bottom: tabBarHeight }]}>
-          <GlobalRecordingBar />
-        </View>
+        {!isWeb && (
+          <View style={[styles.recordingBarContainer, { bottom: tabBarHeight }]}>
+            <GlobalRecordingBar />
+          </View>
+        )}
       </View>
+  );
+
+  // ウェブではRecordingSessionProviderをスキップ（音声許可を求めない）
+  if (isWeb) {
+    return tabsContent;
+  }
+
+  return (
+    <RecordingSessionProvider>
+      {tabsContent}
     </RecordingSessionProvider>
   );
 }
