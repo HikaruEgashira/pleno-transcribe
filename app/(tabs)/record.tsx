@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import {
   Text,
   View,
@@ -6,10 +6,8 @@ import {
   StyleSheet,
   Animated,
   ScrollView,
-  Platform,
 } from "react-native";
 import { useKeepAwake } from "expo-keep-awake";
-import { SystemAudioStream, AudioSource } from "@/packages/lib/system-audio-stream";
 
 import { ScreenContainer } from "@/packages/components/screen-container";
 import { IconSymbol } from "@/packages/components/ui/icon-symbol";
@@ -24,18 +22,10 @@ function formatTime(seconds: number): string {
   return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}.${ms.toString().padStart(2, "0")}`;
 }
 
-const AUDIO_SOURCE_OPTIONS: { key: AudioSource; label: string; icon: string }[] = [
-  { key: "microphone", label: "マイク", icon: "mic.fill" },
-  { key: "system", label: "システム音声", icon: "display" },
-  { key: "both", label: "両方", icon: "waveform" },
-];
-
 export default function RecordScreen() {
   const colors = useColors();
   const { isDesktop, layoutMode } = useResponsive();
   const scrollViewRef = useRef<ScrollView>(null);
-  const [audioSource, setAudioSource] = useState<AudioSource>("microphone");
-  const isSystemAudioSupported = Platform.OS === "web" && SystemAudioStream.isSupported();
 
   const {
     state,
@@ -114,51 +104,6 @@ export default function RecordScreen() {
             </View>
           )}
         </View>
-
-        {/* Audio Source Selector (Web only) */}
-        {isSystemAudioSupported && !isRecording && (
-          <View style={styles.audioSourceContainer}>
-            <Text style={[styles.audioSourceLabel, { color: colors.muted }]}>
-              音声ソース
-            </Text>
-            <View style={[styles.audioSourceSelector, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              {AUDIO_SOURCE_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option.key}
-                  onPress={() => setAudioSource(option.key)}
-                  style={[
-                    styles.audioSourceOption,
-                    audioSource === option.key && {
-                      backgroundColor: colors.primary,
-                    },
-                  ]}
-                  activeOpacity={0.7}
-                >
-                  <IconSymbol
-                    name={option.icon as any}
-                    size={16}
-                    color={audioSource === option.key ? "#FFFFFF" : colors.muted}
-                  />
-                  <Text
-                    style={[
-                      styles.audioSourceText,
-                      {
-                        color: audioSource === option.key ? "#FFFFFF" : colors.foreground,
-                      },
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            {audioSource !== "microphone" && (
-              <Text style={[styles.audioSourceHint, { color: colors.muted }]}>
-                録音開始時に画面共有ダイアログが表示されます
-              </Text>
-            )}
-          </View>
-        )}
 
         {/* Timer */}
         <View style={styles.timerContainer}>
@@ -380,37 +325,6 @@ const styles = StyleSheet.create({
   recordingText: {
     fontSize: 14,
     fontWeight: "700",
-  },
-  audioSourceContainer: {
-    marginBottom: 8,
-  },
-  audioSourceLabel: {
-    fontSize: 12,
-    marginBottom: 8,
-  },
-  audioSourceSelector: {
-    flexDirection: "row",
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 4,
-  },
-  audioSourceOption: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  audioSourceText: {
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  audioSourceHint: {
-    fontSize: 11,
-    marginTop: 8,
-    textAlign: "center",
   },
   timerContainer: {
     alignItems: "center",

@@ -9,7 +9,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { Alert, Platform } from "react-native";
 import { trpc } from "@/packages/lib/trpc";
 import { RealtimeTranscriptionClient } from "@/packages/lib/realtime-transcription";
-import { WebAudioStream } from "@/packages/lib/web-audio-stream";
+import { SystemAudioStream, AudioSource } from "@/packages/lib/system-audio-stream";
 import type {
   TranscriptSegment,
   RealtimeTranscriptionState,
@@ -59,7 +59,7 @@ export function useRealtimeTranscription() {
   const recordingStartTimeRef = useRef<number>(0);
   const currentRecordingIdRef = useRef<string | null>(null);
   const audioSubscriptionRef = useRef<{ remove: () => void } | null>(null);
-  const webAudioStreamRef = useRef<WebAudioStream | null>(null);
+  const systemAudioStreamRef = useRef<SystemAudioStream | null>(null);
 
   // tRPC mutation for generating realtime token
   const generateTokenMutation = trpc.ai.generateRealtimeToken.useMutation();
@@ -70,8 +70,8 @@ export function useRealtimeTranscription() {
       if (audioSubscriptionRef.current) {
         audioSubscriptionRef.current.remove();
       }
-      if (webAudioStreamRef.current) {
-        webAudioStreamRef.current.stop();
+      if (systemAudioStreamRef.current) {
+        systemAudioStreamRef.current.stop();
       }
       if (clientRef.current) {
         clientRef.current.disconnect();
@@ -158,40 +158,46 @@ export function useRealtimeTranscription() {
 
   /**
    * 音声ストリーミングを開始（Webプラットフォーム用）
+   * @param audioSource - 音声ソース (microphone, system, both)
    */
-  const startWebAudioStreaming = useCallback(async () => {
+  const startWebAudioStreaming = useCallback(async (audioSource: AudioSource = 'microphone') => {
     try {
-      console.log("[useRealtimeTranscription] Starting web audio streaming...");
+      console.log("[useRealtimeTranscription] Starting web audio streaming with source:", audioSource);
 
-      webAudioStreamRef.current = new WebAudioStream();
+      systemAudioStreamRef.current = new SystemAudioStream();
 
       let chunkCount = 0;
-      await webAudioStreamRef.current.start((base64Audio) => {
-        chunkCount++;
-        if (chunkCount % 10 === 1) {
-          console.log(`[useRealtimeTranscription] Sending audio chunk #${chunkCount}, connected: ${clientRef.current?.isConnected}`);
-        }
-        if (clientRef.current?.isConnected) {
-          clientRef.current.sendAudioChunk(base64Audio, 16000);
-        }
-      }, 16000);
+      await systemAudioStreamRef.current.start(
+        audioSource,
+        (base64Audio) => {
+          chunkCount++;
+          if (chunkCount % 10 === 1) {
+            console.log(`[useRealtimeTranscription] Sending audio chunk #${chunkCount}, connected: ${clientRef.current?.isConnected}`);
+          }
+          if (clientRef.current?.isConnected) {
+            clientRef.current.sendAudioChunk(base64Audio, 16000);
+          }
+        },
+        16000
+      );
 
       console.log("[useRealtimeTranscription] Web audio streaming started");
     } catch (error) {
       console.error("[useRealtimeTranscription] Failed to start web audio streaming:", error);
       setState((prev) => ({
         ...prev,
-        error: `マイクアクセス失敗: ${error instanceof Error ? error.message : "不明なエラー"}`,
+        error: `音声アクセス失敗: ${error instanceof Error ? error.message : "不明なエラー"}`,
       }));
     }
   }, []);
 
   /**
    * 音声ストリーミングを開始（プラットフォームに応じて）
+   * @param audioSource - 音声ソース (Webのみ有効)
    */
-  const startAudioStreaming = useCallback(async () => {
+  const startAudioStreaming = useCallback(async (audioSource: AudioSource = 'microphone') => {
     if (Platform.OS === "web") {
-      await startWebAudioStreaming();
+      await startWebAudioStreaming(audioSource);
     } else {
       await startNativeAudioStreaming();
     }
@@ -224,9 +230,9 @@ export function useRealtimeTranscription() {
    * 音声ストリーミングを停止（Webプラットフォーム用）
    */
   const stopWebAudioStreaming = useCallback(() => {
-    if (webAudioStreamRef.current) {
-      webAudioStreamRef.current.stop();
-      webAudioStreamRef.current = null;
+    if (systemAudioStreamRef.current) {
+      systemAudioStreamRef.current.stop();
+      systemAudioStreamRef.current = null;
     }
   }, []);
 
@@ -254,7 +260,8 @@ export function useRealtimeTranscription() {
   const startSession = useCallback(async (
     recordingId: string,
     options: RealtimeOptions = {},
-    callbacks?: RealtimeSessionCallbacks
+    callbacks?: RealtimeSessionCallbacks,
+    audioSource: AudioSource = 'microphone'
   ): Promise<void> => {
     // コールバックを保存
     callbacksRef.current = callbacks || null;
@@ -516,7 +523,7 @@ export function useRealtimeTranscription() {
       await client.connect(token, connectionOptions);
 
       // 音声ストリーミングを開始
-      await startAudioStreaming();
+      await startAudioStreaming(audioSource);
 
       console.log("[useRealtimeTranscription] Session started successfully");
     } catch (error) {

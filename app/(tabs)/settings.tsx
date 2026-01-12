@@ -21,6 +21,7 @@ import { useColors } from "@/packages/hooks/use-colors";
 type SummaryTemplate = "general" | "meeting" | "interview" | "lecture";
 type Language = "ja" | "en" | "auto";
 type TranscriptionProvider = "elevenlabs" | "gemini";
+type AudioSource = "microphone" | "system" | "both";
 
 interface SettingsState {
   language: Language;
@@ -28,6 +29,7 @@ interface SettingsState {
   autoTranscribe: boolean;
   autoSummarize: boolean;
   transcriptionProvider: TranscriptionProvider;
+  audioSource: AudioSource;
   realtimeTranscription: {
     enabled: boolean;
     language: string;
@@ -62,6 +64,12 @@ const TRANSLATION_LANGUAGES: { value: string; label: string }[] = [
   { value: "en", label: "English (英語)" },
 ];
 
+const AUDIO_SOURCES: { value: AudioSource; label: string; description: string; icon: string }[] = [
+  { value: "microphone", label: "マイクのみ", description: "マイクからの音声を録音", icon: "mic.fill" },
+  { value: "system", label: "システム音声のみ", description: "デバイスの内部音声を録音", icon: "display" },
+  { value: "both", label: "マイク + システム音声", description: "両方の音声をミックスして録音", icon: "waveform" },
+];
+
 const SETTINGS_KEY = "app-settings";
 
 export default function SettingsScreen() {
@@ -74,6 +82,7 @@ export default function SettingsScreen() {
     autoTranscribe: true,
     autoSummarize: true,
     transcriptionProvider: "elevenlabs",
+    audioSource: "microphone",
     realtimeTranscription: {
       enabled: true,
       language: "ja",
@@ -225,6 +234,66 @@ export default function SettingsScreen() {
             </View>
           </View>
         </View>
+
+        {/* Audio Source (Web only) */}
+        {Platform.OS === "web" && (
+          <View style={[styles.section, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>音声ソース</Text>
+            {AUDIO_SOURCES.map((source) => (
+              <TouchableOpacity
+                key={source.value}
+                onPress={() => {
+                  if (Platform.OS !== "web") {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }
+                  setSettings((prev) => ({ ...prev, audioSource: source.value }));
+                }}
+                style={[
+                  styles.templateItem,
+                  {
+                    backgroundColor:
+                      settings.audioSource === source.value
+                        ? colors.primary + "15"
+                        : "transparent",
+                    borderColor:
+                      settings.audioSource === source.value ? colors.primary : colors.border,
+                  },
+                ]}
+              >
+                <IconSymbol name={source.icon as any} size={20} color={settings.audioSource === source.value ? colors.primary : colors.muted} />
+                <View style={styles.templateContent}>
+                  <Text
+                    style={[
+                      styles.templateLabel,
+                      {
+                        color:
+                          settings.audioSource === source.value
+                            ? colors.primary
+                            : colors.foreground,
+                      },
+                    ]}
+                  >
+                    {source.label}
+                  </Text>
+                  <Text style={[styles.templateDescription, { color: colors.muted }]}>
+                    {source.description}
+                  </Text>
+                </View>
+                {settings.audioSource === source.value && (
+                  <IconSymbol name="checkmark" size={20} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+            {settings.audioSource !== "microphone" && (
+              <View style={[styles.noteBox, { backgroundColor: colors.primary + "15" }]}>
+                <IconSymbol name="info.circle.fill" size={16} color={colors.primary} />
+                <Text style={[styles.noteText, { color: colors.primary }]}>
+                  録音開始時に画面共有ダイアログが表示されます
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Language */}
         <View style={[styles.section, { backgroundColor: colors.surface }]}>

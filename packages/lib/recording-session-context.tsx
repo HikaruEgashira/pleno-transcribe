@@ -20,6 +20,8 @@ const RECORDING_OPTIONS = {
   isMeteringEnabled: true,
 };
 
+export type AudioSource = "microphone" | "system" | "both";
+
 interface RecordingSessionState {
   isRecording: boolean;
   isPaused: boolean;
@@ -29,6 +31,7 @@ interface RecordingSessionState {
   realtimeEnabled: boolean;
   translationEnabled: boolean;
   translationTargetLanguage: string;
+  audioSource: AudioSource;
   currentRecordingId: string | null;
   justCompleted: boolean;
   metering: number;
@@ -65,6 +68,7 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
   const [realtimeEnabled, setRealtimeEnabled] = useState(false);
   const [translationEnabled, setTranslationEnabled] = useState(false);
   const [translationTargetLanguage, setTranslationTargetLanguage] = useState('ja');
+  const [audioSource, setAudioSource] = useState<AudioSource>('microphone');
   const [currentRecordingId, setCurrentRecordingId] = useState<string | null>(null);
   const [justCompleted, setJustCompleted] = useState(false);
 
@@ -145,10 +149,12 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
             realtimeEnabled: settings.realtimeTranscription?.enabled,
             translationEnabled: settings.realtimeTranslation?.enabled,
             targetLanguage: settings.realtimeTranslation?.targetLanguage,
+            audioSource: settings.audioSource,
           });
           setRealtimeEnabled(settings.realtimeTranscription?.enabled || false);
           setTranslationEnabled(settings.realtimeTranslation?.enabled || false);
           setTranslationTargetLanguage(settings.realtimeTranslation?.targetLanguage || 'ja');
+          setAudioSource(settings.audioSource || 'microphone');
         }
       } catch (error) {
         console.error('Failed to load settings:', error);
@@ -279,6 +285,7 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
         realtimeEnabled,
         translationEnabled,
         translationTargetLanguage,
+        audioSource,
       });
       if (realtimeEnabled) {
         try {
@@ -288,11 +295,11 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
             clearTranslationCache();
           }
           // 翻訳コールバックを渡してリアルタイムセッション開始
-          console.log('[RecordingSession] Starting realtime session with translation:', translationEnabled);
+          console.log('[RecordingSession] Starting realtime session with translation:', translationEnabled, 'audioSource:', audioSource);
           await startRealtimeSession(recordingId, {}, {
             onPartial: translationEnabled ? translatePartial : undefined,
             onCommitted: translationEnabled ? translateCommitted : undefined,
-          });
+          }, audioSource);
           console.log('Realtime transcription session started');
         } catch (error) {
           console.error('Failed to start realtime session:', error);
@@ -548,6 +555,7 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
     realtimeEnabled,
     translationEnabled,
     translationTargetLanguage,
+    audioSource,
     currentRecordingId,
     justCompleted,
     metering,
@@ -587,6 +595,7 @@ const defaultState: RecordingSessionState = {
   realtimeEnabled: false,
   translationEnabled: false,
   translationTargetLanguage: 'ja',
+  audioSource: 'microphone',
   currentRecordingId: null,
   justCompleted: false,
   metering: -160,
