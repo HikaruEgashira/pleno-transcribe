@@ -15,7 +15,7 @@ import { useRouter } from "expo-router";
 import { Swipeable } from "react-native-gesture-handler";
 
 import { ScreenContainer } from "@/packages/components/screen-container";
-import { Haptics } from "@/packages/platform";
+import { Haptics, Storage } from "@/packages/platform";
 import { IconSymbol } from "@/packages/components/ui/icon-symbol";
 import { useRecordings } from "@/packages/lib/recordings-context";
 import { useColors } from "@/packages/hooks/use-colors";
@@ -315,6 +315,61 @@ export default function HomeScreen() {
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest" | "longest" | "shortest">("newest");
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [showSearchHistory, setShowSearchHistory] = useState(false);
+
+  // 検索履歴をロード
+  useEffect(() => {
+    const loadSearchHistory = async () => {
+      try {
+        const saved = await Storage.getItem("search-history");
+        if (saved) {
+          setSearchHistory(JSON.parse(saved));
+        }
+      } catch (error) {
+        console.error("Failed to load search history:", error);
+      }
+    };
+    loadSearchHistory();
+  }, []);
+
+  // 検索履歴を保存
+  const saveToSearchHistory = useCallback(async (query: string) => {
+    if (!query.trim()) return;
+    const trimmedQuery = query.trim();
+    // 重複を削除して先頭に追加
+    const updatedHistory = [
+      trimmedQuery,
+      ...searchHistory.filter((h) => h !== trimmedQuery),
+    ].slice(0, 10); // 最大10件
+    setSearchHistory(updatedHistory);
+    try {
+      await Storage.setItem("search-history", JSON.stringify(updatedHistory));
+    } catch (error) {
+      console.error("Failed to save search history:", error);
+    }
+  }, [searchHistory]);
+
+  // 検索履歴から削除
+  const removeFromSearchHistory = useCallback(async (query: string) => {
+    const updatedHistory = searchHistory.filter((h) => h !== query);
+    setSearchHistory(updatedHistory);
+    try {
+      await Storage.setItem("search-history", JSON.stringify(updatedHistory));
+    } catch (error) {
+      console.error("Failed to save search history:", error);
+    }
+  }, [searchHistory]);
+
+  // 検索履歴をクリア
+  const clearSearchHistory = useCallback(async () => {
+    setSearchHistory([]);
+    try {
+      await Storage.removeItem("search-history");
+    } catch (error) {
+      console.error("Failed to clear search history:", error);
+    }
+  }, []);
 
   // 全ての一意なタグを収集
   const allTags = useMemo(() => {
@@ -497,20 +552,59 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <View style={[styles.searchContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <IconSymbol name="magnifyingglass" size={20} color={colors.muted} />
-        <TextInput
-          style={[styles.searchInput, { color: colors.foreground }]}
-          placeholder={t("notes.searchPlaceholder")}
-          placeholderTextColor={colors.muted}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          returnKeyType="search"
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery("")}>
-            <IconSymbol name="xmark" size={18} color={colors.muted} />
-          </TouchableOpacity>
+      <View style={styles.searchWrapper}>
+        <View style={[styles.searchContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <IconSymbol name="magnifyingglass" size={20} color={colors.muted} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.foreground }]}
+            placeholder={t("notes.searchPlaceholder")}
+            placeholderTextColor={colors.muted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onFocus={() => setShowSearchHistory(true)}
+            onBlur={() => setTimeout(() => setShowSearchHistory(false), 200)}
+            onSubmitEditing={() => {
+              if (searchQuery.trim()) {
+                saveToSearchHistory(searchQuery);
+              }
+              setShowSearchHistory(false);
+            }}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery("")}>
+              <IconSymbol name="xmark" size={18} color={colors.muted} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Search History Dropdown */}
+        {showSearchHistory && searchHistory.length > 0 && (
+          <View style={[styles.searchHistoryDropdown, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.searchHistoryHeader}>
+              <Text style={[styles.searchHistoryTitle, { color: colors.muted }]}>検索履歴</Text>
+              <TouchableOpacity onPress={clearSearchHistory}>
+                <Text style={[styles.searchHistoryClear, { color: colors.primary }]}>クリア</Text>
+              </TouchableOpacity>
+            </View>
+            {searchHistory.map((item) => (
+              <View key={item} style={styles.searchHistoryItem}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setSearchQuery(item);
+                    setShowSearchHistory(false);
+                  }}
+                  style={styles.searchHistoryItemContent}
+                >
+                  <IconSymbol name="clock.fill" size={14} color={colors.muted} />
+                  <Text style={[styles.searchHistoryText, { color: colors.foreground }]}>{item}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => removeFromSearchHistory(item)}>
+                  <IconSymbol name="xmark" size={14} color={colors.muted} />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
         )}
       </View>
 
@@ -756,15 +850,63 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "500",
   },
+  searchWrapper: {
+    position: "relative",
+    marginHorizontal: 20,
+    zIndex: 100,
+  },
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginHorizontal: 20,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 12,
     borderWidth: 1,
     gap: 8,
+  },
+  searchHistoryDropdown: {
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    right: 0,
+    marginTop: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 8,
+  },
+  searchHistoryHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0,0,0,0.1)",
+    marginBottom: 4,
+  },
+  searchHistoryTitle: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  searchHistoryClear: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  searchHistoryItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  searchHistoryItemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  searchHistoryText: {
+    fontSize: 14,
   },
   searchInput: {
     flex: 1,
