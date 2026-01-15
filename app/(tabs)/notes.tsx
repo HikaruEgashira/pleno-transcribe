@@ -240,7 +240,11 @@ export default function HomeScreen() {
         (r) =>
           r.title.toLowerCase().includes(query) ||
           r.transcript?.text.toLowerCase().includes(query) ||
-          r.notes.toLowerCase().includes(query)
+          r.notes.toLowerCase().includes(query) ||
+          // Phase 2 P5: Enhanced search with keywords, tags, and action items
+          r.keywords.some((k) => k.text.toLowerCase().includes(query)) ||
+          r.tags.some((t) => t.name.toLowerCase().includes(query)) ||
+          r.actionItems.some((a) => a.text.toLowerCase().includes(query))
       );
     }
 
