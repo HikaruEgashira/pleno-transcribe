@@ -677,14 +677,38 @@ const handleSummarize = async () => {
     }
   };
 
+  // 現在のタイムスタンプ周辺のテキストを取得
+  const getContextAroundTimestamp = useCallback((timestamp: number, windowSeconds: number = 30): string | null => {
+    if (!recording?.transcript?.segments) return null;
+
+    const relevantSegments = recording.transcript.segments.filter(
+      (seg) => seg.startTime >= timestamp - windowSeconds && seg.endTime <= timestamp + windowSeconds
+    );
+
+    if (relevantSegments.length === 0) return null;
+
+    return relevantSegments.map((seg) => seg.text).join(" ");
+  }, [recording?.transcript?.segments]);
+
   const handleAskQuestion = async () => {
     if (!recording?.transcript || !qaInput.trim()) return;
+
+    // 現在再生位置のコンテキストを取得
+    const contextText = getContextAroundTimestamp(currentTime);
+    const contextInfo = contextText
+      ? `\n\n[現在再生位置 ${formatTime(currentTime)} 周辺のテキスト]\n${contextText}`
+      : "";
 
     const userMessage: QAMessage = {
       id: Date.now().toString(),
       role: "user",
       content: qaInput,
       timestamp: new Date(),
+      references: contextText ? [{
+        startTime: Math.max(0, currentTime - 30),
+        endTime: currentTime + 30,
+        text: contextText,
+      }] : undefined,
     };
     addQAMessage(recording.id, userMessage);
     const question = qaInput;
@@ -693,9 +717,11 @@ const handleSummarize = async () => {
 
     try {
       const result = await qaMutation.mutateAsync({
-        question,
+        question: contextText
+          ? `${question}\n\n[参考: 再生位置 ${formatTime(currentTime)} 周辺のテキスト]\n${contextText}`
+          : question,
         transcriptText: recording.transcript.text,
-        previousQA: recording.qaHistory.map((m) => ({
+        previousQA: recording.qaHistory.slice(-6).map((m) => ({
           role: m.role,
           content: m.content,
         })),
@@ -1651,26 +1677,37 @@ const handleSummarize = async () => {
 
         {/* Q&A Input */}
         {activeTab === "qa" && recording.transcript && (
-          <View style={[styles.qaInputContainer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
-            <TextInput
-              style={[styles.qaInput, { backgroundColor: colors.surface, color: colors.foreground }]}
-              placeholder="質問を入力..."
-              placeholderTextColor={colors.muted}
-              value={qaInput}
-              onChangeText={setQaInput}
-              returnKeyType="send"
-              onSubmitEditing={handleAskQuestion}
-            />
-            <TouchableOpacity
-              onPress={handleAskQuestion}
-              disabled={!qaInput.trim() || isProcessing}
-              style={[
-                styles.sendButton,
-                { backgroundColor: qaInput.trim() ? colors.primary : colors.muted },
-              ]}
-            >
-              <IconSymbol name="paperplane.fill" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
+          <View style={[styles.qaInputWrapper, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+            {/* Context Indicator */}
+            {currentTime > 0 && getContextAroundTimestamp(currentTime) && (
+              <View style={[styles.contextIndicator, { backgroundColor: colors.primary + "15" }]}>
+                <IconSymbol name="clock.fill" size={12} color={colors.primary} />
+                <Text style={[styles.contextIndicatorText, { color: colors.primary }]} numberOfLines={1}>
+                  再生位置 {formatTime(currentTime)} のコンテキストを参照中
+                </Text>
+              </View>
+            )}
+            <View style={styles.qaInputContainer}>
+              <TextInput
+                style={[styles.qaInput, { backgroundColor: colors.surface, color: colors.foreground }]}
+                placeholder="質問を入力..."
+                placeholderTextColor={colors.muted}
+                value={qaInput}
+                onChangeText={setQaInput}
+                returnKeyType="send"
+                onSubmitEditing={handleAskQuestion}
+              />
+              <TouchableOpacity
+                onPress={handleAskQuestion}
+                disabled={!qaInput.trim() || isProcessing}
+                style={[
+                  styles.sendButton,
+                  { backgroundColor: qaInput.trim() ? colors.primary : colors.muted },
+                ]}
+              >
+                <IconSymbol name="paperplane.fill" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
           </View>
         )}
         <GlobalRecordingBar />
@@ -2007,11 +2044,25 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
+  qaInputWrapper: {
+    borderTopWidth: 1,
+  },
+  contextIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 6,
+  },
+  contextIndicatorText: {
+    fontSize: 12,
+    fontWeight: "500",
+    flex: 1,
+  },
   qaInputContainer: {
     flexDirection: "row",
     padding: 12,
     gap: 8,
-    borderTopWidth: 1,
   },
   qaInput: {
     flex: 1,
