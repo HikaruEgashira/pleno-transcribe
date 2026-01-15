@@ -169,12 +169,33 @@ const RecordingCard = React.memo(function RecordingCard({ recording, onPress, on
         </Text>
       </View>
 
-      {recording.highlights.length > 0 && (
-        <View style={styles.highlightsRow}>
-          <IconSymbol name="star.fill" size={12} color={colors.highlight} />
-          <Text style={[styles.highlightCount, { color: colors.highlight }]}>
-            {recording.highlights.length}個のハイライト
-          </Text>
+      {/* Metadata indicators row */}
+      {(recording.highlights.length > 0 || recording.actionItems.length > 0 || recording.keywords.length > 0) && (
+        <View style={styles.metadataRow}>
+          {recording.highlights.length > 0 && (
+            <View style={styles.metadataItem}>
+              <IconSymbol name="star.fill" size={12} color={colors.highlight} />
+              <Text style={[styles.metadataCount, { color: colors.highlight }]}>
+                {recording.highlights.length}
+              </Text>
+            </View>
+          )}
+          {recording.actionItems.length > 0 && (
+            <View style={styles.metadataItem}>
+              <IconSymbol name="checkmark.circle.fill" size={12} color={colors.success} />
+              <Text style={[styles.metadataCount, { color: colors.success }]}>
+                {recording.actionItems.filter(a => !a.completed).length}/{recording.actionItems.length}
+              </Text>
+            </View>
+          )}
+          {recording.keywords.length > 0 && (
+            <View style={styles.metadataItem}>
+              <IconSymbol name="text.word.spacing" size={12} color={colors.primary} />
+              <Text style={[styles.metadataCount, { color: colors.primary }]}>
+                {recording.keywords.length}
+              </Text>
+            </View>
+          )}
         </View>
       )}
 
@@ -253,6 +274,7 @@ export default function HomeScreen() {
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "transcribed" | "summarized">("all");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest" | "longest" | "shortest">("newest");
 
   // 全ての一意なタグを収集
   const allTags = useMemo(() => {
@@ -301,8 +323,24 @@ export default function HomeScreen() {
       result = result.filter((r) => r.tags.some((t) => t.name === selectedTag));
     }
 
+    // Apply sort
+    result = [...result].sort((a, b) => {
+      switch (sortOrder) {
+        case "newest":
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        case "oldest":
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        case "longest":
+          return b.duration - a.duration;
+        case "shortest":
+          return a.duration - b.duration;
+        default:
+          return 0;
+      }
+    });
+
     return result;
-  }, [state.recordings, debouncedSearchQuery, filter, selectedTag]);
+  }, [state.recordings, debouncedSearchQuery, filter, selectedTag, sortOrder]);
 
   // コールバックをメモ化してRecordingCardの再レンダリングを防止
   const handleRecordingPress = useCallback((id: string) => {
@@ -352,28 +390,47 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.filterRow}>
-        {(["all", "transcribed", "summarized"] as const).map((f) => (
-          <TouchableOpacity
-            key={f}
-            onPress={() => setFilter(f)}
-            style={[
-              styles.filterButton,
-              {
-                backgroundColor: filter === f ? colors.primary : colors.surface,
-                borderColor: filter === f ? colors.primary : colors.border,
-              },
-            ]}
-          >
-            <Text
+        <View style={styles.filterButtons}>
+          {(["all", "transcribed", "summarized"] as const).map((f) => (
+            <TouchableOpacity
+              key={f}
+              onPress={() => setFilter(f)}
               style={[
-                styles.filterText,
-                { color: filter === f ? "#FFFFFF" : colors.muted },
+                styles.filterButton,
+                {
+                  backgroundColor: filter === f ? colors.primary : colors.surface,
+                  borderColor: filter === f ? colors.primary : colors.border,
+                },
               ]}
             >
-              {f === "all" ? t("notes.allNotes") : f === "transcribed" ? t("notes.transcribed") : t("notes.summarized")}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <Text
+                style={[
+                  styles.filterText,
+                  { color: filter === f ? "#FFFFFF" : colors.muted },
+                ]}
+              >
+                {f === "all" ? t("notes.allNotes") : f === "transcribed" ? t("notes.transcribed") : t("notes.summarized")}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <TouchableOpacity
+          onPress={() => {
+            const orders: ("newest" | "oldest" | "longest" | "shortest")[] = ["newest", "oldest", "longest", "shortest"];
+            const currentIndex = orders.indexOf(sortOrder);
+            setSortOrder(orders[(currentIndex + 1) % orders.length]);
+          }}
+          style={[styles.sortButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        >
+          <IconSymbol
+            name={sortOrder === "newest" || sortOrder === "oldest" ? "calendar" : "clock"}
+            size={14}
+            color={colors.muted}
+          />
+          <Text style={[styles.sortText, { color: colors.muted }]}>
+            {sortOrder === "newest" ? "新しい順" : sortOrder === "oldest" ? "古い順" : sortOrder === "longest" ? "長い順" : "短い順"}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Tag Filter */}
@@ -493,7 +550,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingHorizontal: 20,
     paddingVertical: 12,
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  filterButtons: {
+    flexDirection: "row",
     gap: 8,
+  },
+  sortButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 4,
+  },
+  sortText: {
+    fontSize: 12,
+    fontWeight: "500",
   },
   filterButton: {
     paddingHorizontal: 14,
@@ -558,13 +633,18 @@ const styles = StyleSheet.create({
   metaText: {
     fontSize: 13,
   },
-  highlightsRow: {
+  metadataRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 8,
+  },
+  metadataItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    marginTop: 8,
   },
-  highlightCount: {
+  metadataCount: {
     fontSize: 12,
     fontWeight: "500",
   },
