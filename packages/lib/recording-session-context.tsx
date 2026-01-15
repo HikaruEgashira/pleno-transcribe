@@ -7,7 +7,8 @@ import { useRecordings } from './recordings-context';
 import { useRealtimeTranscription } from '@/packages/hooks/use-realtime-transcription';
 import { useRealtimeTranslation } from '@/packages/hooks/use-realtime-translation';
 import { useBackgroundRecording } from '@/packages/hooks/use-background-recording';
-import { Recording, Highlight } from '@/packages/types/recording';
+import { useRecordingDraft } from '@/packages/hooks/use-recording-draft';
+import { Recording, Highlight, RecordingDraft } from '@/packages/types/recording';
 import type { TranslationStatus } from '@/packages/types/realtime-transcription';
 import { Storage, Haptics, FileSystem, Permissions, createAudioMetering, type AudioMeteringController } from '@/packages/platform';
 
@@ -45,6 +46,8 @@ interface RecordingSessionContextValue {
   cancelRecording: () => Promise<void>;
   addHighlight: () => void;
   clearJustCompleted: () => void;
+  checkForRecovery: () => Promise<RecordingDraft | null>;
+  clearRecoveryDraft: () => Promise<void>;
 }
 
 const RecordingSessionContext = createContext<RecordingSessionContextValue | null>(null);
@@ -100,6 +103,9 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
 
   // Enable background recording for iOS/Android
   useBackgroundRecording(isRecording);
+
+  // Auto-save draft hook
+  const { startAutoSave, stopAutoSave, loadDraft, clearDraft } = useRecordingDraft();
 
   // Load settings
   useEffect(() => {
@@ -263,6 +269,16 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
       const recordingId = Date.now().toString();
       setCurrentRecordingId(recordingId);
 
+      // 自動保存を開始
+      startAutoSave(() => ({
+        id: recordingId,
+        duration,
+        highlights,
+        realtimeEnabled,
+        realtimeSegments: realtimeState.segments,
+        meteringHistory: fullMeteringHistory,
+      }));
+
       console.log('[RecordingSession] Starting recording with settings:', {
         realtimeEnabled,
         translationEnabled,
@@ -310,6 +326,9 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
 
   const stopRecording = useCallback(async () => {
     await Haptics.notification('success');
+
+    // 自動保存を停止
+    stopAutoSave();
 
     try {
       if (realtimeEnabled && currentRecordingId) {
@@ -443,16 +462,22 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
       setJustCompleted(true);
       isStartingRef.current = false;
 
+      // ドラフトをクリア（正常終了）
+      await clearDraft();
+
       router.push(`/note/${newRecording.id}`);
     } catch (error) {
       console.error('Failed to stop recording:', error);
       Alert.alert('エラー', '録音の保存に失敗しました');
       isStartingRef.current = false;
     }
-  }, [audioRecorder, duration, highlights, addRecording, router, currentRecordingId, realtimeEnabled, stopRealtimeSession, realtimeState.segments, consolidateSegments, setTranscript, translationEnabled, getTranslation, translationTargetLanguage, fullMeteringHistory]);
+  }, [audioRecorder, duration, highlights, addRecording, router, currentRecordingId, realtimeEnabled, stopRealtimeSession, realtimeState.segments, consolidateSegments, setTranscript, translationEnabled, getTranslation, translationTargetLanguage, fullMeteringHistory, stopAutoSave, clearDraft]);
 
   const cancelRecording = useCallback(async () => {
     await Haptics.notification('warning');
+
+    // 自動保存を停止
+    stopAutoSave();
 
     try {
       if (realtimeEnabled && currentRecordingId) {
@@ -473,6 +498,9 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
       setCurrentRecordingId(null);
       setJustCompleted(true);
       isStartingRef.current = false;
+
+      // ドラフトをクリア（キャンセル）
+      await clearDraft();
     } catch (error) {
       console.error('Failed to cancel recording:', error);
       setIsRecording(false);
@@ -483,8 +511,11 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
       setCurrentRecordingId(null);
       setJustCompleted(true);
       isStartingRef.current = false;
+
+      // エラー時もドラフトをクリア
+      await clearDraft();
     }
-  }, [audioRecorder, realtimeEnabled, currentRecordingId, stopRealtimeSession]);
+  }, [audioRecorder, realtimeEnabled, currentRecordingId, stopRealtimeSession, stopAutoSave, clearDraft]);
 
   const addHighlightHandler = useCallback(() => {
     Haptics.impact('heavy');
@@ -499,6 +530,21 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
   const clearJustCompleted = useCallback(() => {
     setJustCompleted(false);
   }, []);
+
+  /**
+   * 未保存の録音ドラフトを確認（アプリ起動時に呼び出す）
+   */
+  const checkForRecovery = useCallback(async (): Promise<RecordingDraft | null> => {
+    if (isRecording) return null;
+    return await loadDraft();
+  }, [isRecording, loadDraft]);
+
+  /**
+   * 復元ドラフトをクリア（ユーザーが破棄を選択した場合）
+   */
+  const clearRecoveryDraft = useCallback(async (): Promise<void> => {
+    await clearDraft();
+  }, [clearDraft]);
 
   const state: RecordingSessionState = {
     isRecording,
@@ -531,6 +577,8 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
         cancelRecording,
         addHighlight: addHighlightHandler,
         clearJustCompleted,
+        checkForRecovery,
+        clearRecoveryDraft,
       }}
     >
       {children}
@@ -568,6 +616,8 @@ const defaultValue: RecordingSessionContextValue = {
   cancelRecording: async () => {},
   addHighlight: () => {},
   clearJustCompleted: () => {},
+  checkForRecovery: async () => null,
+  clearRecoveryDraft: async () => {},
 };
 
 export function useRecordingSession() {

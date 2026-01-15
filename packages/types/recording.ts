@@ -69,3 +69,18 @@ export interface Recording {
   /** 正規化済み波形データ (0-1) */
   waveformData?: number[];
 }
+
+/**
+ * 録音セッションのドラフト（自動保存用）
+ * アプリがクラッシュした場合の復元に使用
+ */
+export interface RecordingDraft {
+  id: string;
+  startedAt: Date;
+  lastSavedAt: Date;
+  duration: number;
+  highlights: Highlight[];
+  realtimeEnabled: boolean;
+  realtimeSegments?: RealtimeTranscriptSegment[];
+  meteringHistory: number[];
+}
