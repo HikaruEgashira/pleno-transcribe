@@ -1471,4 +1471,125 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
   },
+  // Extended Statistics Styles
+  statsSubsection: {
+    borderTopWidth: 1,
+    marginTop: 12,
+    paddingTop: 12,
+  },
+  statsSubsectionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  statsRow: {
+    flexDirection: "row",
+    gap: 24,
+  },
+  statsRowItem: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 4,
+  },
+  statsRowValue: {
+    fontSize: 24,
+    fontWeight: "700",
+  },
+  statsRowLabel: {
+    fontSize: 13,
+  },
+  progressBars: {
+    gap: 8,
+  },
+  progressBarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  progressBarLabel: {
+    width: 70,
+    fontSize: 13,
+  },
+  progressBarBg: {
+    flex: 1,
+    height: 8,
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  progressBarFill: {
+    height: "100%",
+    borderRadius: 4,
+  },
+  progressBarValue: {
+    width: 40,
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "right",
+  },
+  sentimentRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  sentimentItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+  },
+  sentimentCount: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  actionStatsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  actionStatItem: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 4,
+  },
+  actionStatValue: {
+    fontSize: 24,
+    fontWeight: "700",
+  },
+  actionStatLabel: {
+    fontSize: 13,
+  },
+  actionStatBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    gap: 4,
+  },
+  actionStatBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  topTagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  topTagItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    gap: 6,
+  },
+  topTagName: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  topTagCount: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
 });
