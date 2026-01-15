@@ -484,6 +484,100 @@ JSON形式で以下のように出力してください:
           throw new Error(`アクションアイテム抽出に失敗しました: ${errorMessage}`);
         }
       }),
+
+    // Analyze sentiment from transcript text
+    analyzeSentiment: publicProcedure
+      .input(z.object({
+        text: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        try {
+          const prompt = `以下のテキストの感情分析を行ってください。以下の6つの感情各々のスコア（0-1）と、全体的なセンチメント（ポジティブ/ニュートラル/ネガティブ）を判定してください。
+
+テキスト:
+${input.text}
+
+以下の感情スコア、全体感情スコア（-1=極度にネガティブ〜0=中立〜1=極度にポジティブ）、信頼度、簡潔なサマリーを返してください。
+
+JSON形式で以下のように出力してください:
+{
+  "score": 0.5,
+  "confidence": 0.9,
+  "emotions": {
+    "joy": 0.3,
+    "sadness": 0.1,
+    "anger": 0.05,
+    "fear": 0.1,
+    "surprise": 0.2,
+    "disgust": 0.05
+  },
+  "summary": "感情的なトーンの簡潔な説明"
+}
+
+必ずJSON形式のみを返してください。`;
+
+          const result = await invokeLLM({
+            messages: [
+              {
+                role: "system",
+                content: "あなたは感情分析の専門家です。テキストから感情を抽出し、定量化します。",
+              },
+              {
+                role: "user",
+                content: prompt,
+              },
+            ],
+            maxTokens: 500,
+          });
+
+          const content = result.choices[0]?.message?.content;
+          if (!content) {
+            throw new Error("LLMから応答が得られません");
+          }
+
+          // Extract JSON from response
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          const jsonStr = jsonMatch ? jsonMatch[0] : content;
+          const parsed = JSON.parse(jsonStr);
+
+          // Validate and format response
+          const score = Math.min(1, Math.max(-1, Number(parsed.score) || 0));
+          const confidence = Math.min(1, Math.max(0, Number(parsed.confidence) || 0.5));
+
+          // Determine overall sentiment based on score
+          let overallSentiment: 'positive' | 'neutral' | 'negative';
+          if (score > 0.1) {
+            overallSentiment = 'positive';
+          } else if (score < -0.1) {
+            overallSentiment = 'negative';
+          } else {
+            overallSentiment = 'neutral';
+          }
+
+          // Normalize emotion scores to 0-1
+          const emotions = {
+            joy: Math.min(1, Math.max(0, Number(parsed.emotions?.joy) || 0)),
+            sadness: Math.min(1, Math.max(0, Number(parsed.emotions?.sadness) || 0)),
+            anger: Math.min(1, Math.max(0, Number(parsed.emotions?.anger) || 0)),
+            fear: Math.min(1, Math.max(0, Number(parsed.emotions?.fear) || 0)),
+            surprise: Math.min(1, Math.max(0, Number(parsed.emotions?.surprise) || 0)),
+            disgust: Math.min(1, Math.max(0, Number(parsed.emotions?.disgust) || 0)),
+          };
+
+          return {
+            overallSentiment,
+            score,
+            confidence,
+            emotions,
+            summary: String(parsed.summary || "").trim(),
+            processedAt: new Date(),
+          };
+        } catch (error) {
+          console.error("[TRPC] Sentiment analysis error:", error);
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          throw new Error(`感情分析に失敗しました: ${errorMessage}`);
+        }
+      }),
   }),
 });
 

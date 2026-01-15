@@ -67,6 +67,22 @@ export interface ActionItem {
   associatedTimestamp?: number; // Timestamp in recording where this action was mentioned
 }
 
+export interface SentimentAnalysis {
+  overallSentiment: 'positive' | 'neutral' | 'negative';
+  score: number; // -1 to 1
+  confidence: number; // 0-1
+  emotions: {
+    joy: number;
+    sadness: number;
+    anger: number;
+    fear: number;
+    surprise: number;
+    disgust: number;
+  };
+  summary: string; // Brief summary of emotional tone
+  processedAt: Date;
+}
+
 export interface Recording {
   id: string;
   title: string;
@@ -80,6 +96,7 @@ export interface Recording {
   summary?: Summary;
   tags: Tag[];
   actionItems: ActionItem[];
+  sentiment?: SentimentAnalysis;
   qaHistory: QAMessage[];
   status: 'recording' | 'saved' | 'transcribing' | 'transcribed' | 'summarizing' | 'summarized';
   /** リアルタイム文字起こし（録音中の一時データ） */
