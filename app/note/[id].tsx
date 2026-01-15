@@ -30,6 +30,40 @@ function formatTime(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
+function HighlightedText({
+  text,
+  highlightWord,
+  textStyle,
+  highlightStyle,
+}: {
+  text: string;
+  highlightWord: string | null;
+  textStyle: object;
+  highlightStyle: object;
+}) {
+  if (!highlightWord) {
+    return <Text style={textStyle}>{text}</Text>;
+  }
+
+  const regex = new RegExp(`(${highlightWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  const parts = text.split(regex);
+
+  return (
+    <Text style={textStyle}>
+      {parts.map((part, index) => {
+        if (part.toLowerCase() === highlightWord.toLowerCase()) {
+          return (
+            <Text key={index} style={[textStyle, highlightStyle]}>
+              {part}
+            </Text>
+          );
+        }
+        return part;
+      })}
+    </Text>
+  );
+}
+
 export default function NoteDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -48,6 +82,7 @@ export default function NoteDetailScreen() {
   const [editingActionItemDueDate, setEditingActionItemDueDate] = useState<Date | null>(null);
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [editedNotes, setEditedNotes] = useState("");
+  const [highlightedKeyword, setHighlightedKeyword] = useState<string | null>(null);
 
   const recording = getRecording(id || "");
   const player = useAudioPlayer(recording?.audioUri || "");
@@ -405,6 +440,12 @@ const handleSummarize = async () => {
       // スクロールしてオーディオタブに移動
       setActiveTab("audio");
     }
+  };
+
+  const handleJumpToKeywordInTranscript = (keywordText: string) => {
+    setHighlightedKeyword(keywordText);
+    setActiveTab("transcript");
+    Haptics.impact("light");
   };
 
   const handleAddHighlight = async (label?: string) => {
@@ -805,6 +846,16 @@ const handleSummarize = async () => {
 
           {activeTab === "transcript" && (
             <View style={styles.transcriptTab}>
+              {highlightedKeyword && (
+                <View style={[styles.highlightBanner, { backgroundColor: colors.highlight + "20", borderColor: colors.highlight }]}>
+                  <Text style={[styles.highlightBannerText, { color: colors.highlight }]}>
+                    「{highlightedKeyword}」をハイライト中
+                  </Text>
+                  <TouchableOpacity onPress={() => setHighlightedKeyword(null)}>
+                    <IconSymbol name="xmark.circle.fill" size={20} color={colors.highlight} />
+                  </TouchableOpacity>
+                </View>
+              )}
               {recording.transcript ? (
                 <View style={styles.transcriptContent}>
                   {/* 翻訳がある場合は並列表示 */}
@@ -814,9 +865,12 @@ const handleSummarize = async () => {
                         <Text style={[styles.transcriptLabel, { color: colors.muted }]}>
                           原文
                         </Text>
-                        <Text style={[styles.transcriptText, { color: colors.foreground }]}>
-                          {recording.transcript.text}
-                        </Text>
+                        <HighlightedText
+                          text={recording.transcript.text}
+                          highlightWord={highlightedKeyword}
+                          textStyle={[styles.transcriptText, { color: colors.foreground }]}
+                          highlightStyle={{ backgroundColor: colors.highlight + "40", fontWeight: "600" }}
+                        />
                       </View>
                       <View style={[styles.transcriptDivider, { backgroundColor: colors.border }]} />
                       <View style={styles.transcriptSection}>
@@ -829,9 +883,12 @@ const handleSummarize = async () => {
                       </View>
                     </>
                   ) : (
-                    <Text style={[styles.transcriptText, { color: colors.foreground }]}>
-                      {recording.transcript.text}
-                    </Text>
+                    <HighlightedText
+                      text={recording.transcript.text}
+                      highlightWord={highlightedKeyword}
+                      textStyle={[styles.transcriptText, { color: colors.foreground }]}
+                      highlightStyle={{ backgroundColor: colors.highlight + "40", fontWeight: "600" }}
+                    />
                   )}
                 </View>
               ) : (
@@ -1162,7 +1219,8 @@ const handleSummarize = async () => {
                           return (
                             <TouchableOpacity
                               key={keyword.id}
-                              onPress={() => estimatedTime !== undefined && handleJumpToTimestamp(estimatedTime)}
+                              onPress={() => handleJumpToKeywordInTranscript(keyword.text)}
+                              onLongPress={() => estimatedTime !== undefined && handleJumpToTimestamp(estimatedTime)}
                               activeOpacity={0.7}
                             >
                               <View
@@ -1669,6 +1727,20 @@ const styles = StyleSheet.create({
   },
   transcriptTab: {
     flex: 1,
+  },
+  highlightBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  highlightBannerText: {
+    fontSize: 14,
+    fontWeight: "500",
   },
   transcriptContent: {
     flex: 1,
