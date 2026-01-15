@@ -1,0 +1,67 @@
+name: Canary Release
+
+on:
+  push:
+    branches:
+      - canary
+    paths-ignore:
+      - 'app/website/**'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm check
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION-canary.$SHORT_SHA" >> $GITHUB_OUTPUT
+
+      - name: Create Canary Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Canary ${{ steps.version.outputs.tag }}
+          prerelease: true
+          generate_release_notes: true
+          make_latest: false
+          body: |
+            ## Canary ${{ steps.version.outputs.tag }}
+
+            開発版ビルド（テスト用）:
+            ```bash
+            eas build --platform android --profile preview --local
+            ```
+
+      - name: Cleanup old canary releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          KEEP_COUNT=10
+
+          gh release list --limit 1000 --json tagName,createdAt \
+            --jq "[.[] | select(.tagName | test(\"^v${VERSION}-canary\\\\.\"))] | sort_by(.createdAt) | reverse | .[${KEEP_COUNT}:] | .[].tagName" \
+            | while read -r tag; do
+              [ -n "$tag" ] && gh release delete "$tag" --yes --cleanup-tag && echo "Deleted: $tag"
+            done
