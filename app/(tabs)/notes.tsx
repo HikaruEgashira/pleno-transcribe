@@ -69,20 +69,41 @@ interface RecordingCardProps {
   onPress: () => void;
   onDelete: () => void;
   columns: number;
+  isSelectMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelection?: () => void;
 }
 
-const RecordingCard = React.memo(function RecordingCard({ recording, onPress, onDelete, columns }: RecordingCardProps) {
+const RecordingCard = React.memo(function RecordingCard({
+  recording,
+  onPress,
+  onDelete,
+  columns,
+  isSelectMode = false,
+  isSelected = false,
+  onToggleSelection,
+}: RecordingCardProps) {
   const colors = useColors();
   const statusInfo = getStatusLabel(recording.status);
   const swipeableRef = useRef<Swipeable>(null);
 
   const handleLongPress = useCallback(() => {
+    if (isSelectMode) return;
     Haptics.impact('medium');
     Alert.alert("削除確認", `「${recording.title}」を削除しますか？`, [
       { text: "キャンセル", style: "cancel" },
       { text: "削除", style: "destructive", onPress: onDelete },
     ]);
-  }, [recording.title, onDelete]);
+  }, [recording.title, onDelete, isSelectMode]);
+
+  const handlePress = useCallback(() => {
+    if (isSelectMode && onToggleSelection) {
+      Haptics.impact('light');
+      onToggleSelection();
+    } else {
+      onPress();
+    }
+  }, [isSelectMode, onToggleSelection, onPress]);
 
   const handleDelete = useCallback(() => {
     Haptics.impact('medium');
@@ -133,21 +154,34 @@ const RecordingCard = React.memo(function RecordingCard({ recording, onPress, on
 
   const cardContent = (
     <TouchableOpacity
-      onPress={onPress}
+      onPress={handlePress}
       onLongPress={handleLongPress}
       activeOpacity={0.7}
       style={[
         styles.card,
         {
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
+          backgroundColor: isSelected ? colors.primary + "10" : colors.surface,
+          borderColor: isSelected ? colors.primary : colors.border,
           width: cardWidth,
           marginHorizontal: columns > 1 ? "1%" : 0,
         },
       ]}
     >
       <View style={styles.cardHeader}>
-        <Text style={[styles.cardTitle, { color: colors.foreground }]} numberOfLines={1}>
+        {isSelectMode && (
+          <View style={[
+            styles.checkbox,
+            {
+              backgroundColor: isSelected ? colors.primary : "transparent",
+              borderColor: isSelected ? colors.primary : colors.muted,
+            }
+          ]}>
+            {isSelected && (
+              <IconSymbol name="checkmark" size={14} color="#FFFFFF" />
+            )}
+          </View>
+        )}
+        <Text style={[styles.cardTitle, { color: colors.foreground }, isSelectMode && styles.cardTitleWithCheckbox]} numberOfLines={1}>
           {recording.title}
         </Text>
         <View style={[styles.statusBadge, { backgroundColor: colors[statusInfo.color as keyof typeof colors] + "20" }]}>
@@ -288,7 +322,9 @@ const RecordingCard = React.memo(function RecordingCard({ recording, onPress, on
     prevProps.recording.duration === nextProps.recording.duration &&
     prevProps.recording.highlights.length === nextProps.recording.highlights.length &&
     prevProps.recording.transcript?.text === nextProps.recording.transcript?.text &&
-    prevProps.columns === nextProps.columns
+    prevProps.columns === nextProps.columns &&
+    prevProps.isSelectMode === nextProps.isSelectMode &&
+    prevProps.isSelected === nextProps.isSelected
   );
 });
 
@@ -303,6 +339,8 @@ export default function HomeScreen() {
   const [filter, setFilter] = useState<"all" | "transcribed" | "summarized">("all");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest" | "longest" | "shortest">("newest");
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // 全ての一意なタグを収集
   const allTags = useMemo(() => {
@@ -379,6 +417,56 @@ export default function HomeScreen() {
     await deleteRecording(id);
   }, [deleteRecording]);
 
+  const handleToggleSelectMode = useCallback(() => {
+    setIsSelectMode((prev) => !prev);
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleToggleSelection = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const handleSelectAll = useCallback(() => {
+    const allIds = filteredRecordings.map((r) => r.id);
+    setSelectedIds(new Set(allIds));
+  }, [filteredRecordings]);
+
+  const handleDeselectAll = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleBatchDelete = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+
+    Alert.alert(
+      "一括削除",
+      `${selectedIds.size}件の録音を削除しますか？`,
+      [
+        { text: "キャンセル", style: "cancel" },
+        {
+          text: "削除",
+          style: "destructive",
+          onPress: async () => {
+            Haptics.impact('heavy');
+            for (const id of selectedIds) {
+              await deleteRecording(id);
+            }
+            setSelectedIds(new Set());
+            setIsSelectMode(false);
+          },
+        },
+      ]
+    );
+  }, [selectedIds, deleteRecording]);
+
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
       <IconSymbol name="mic.fill" size={64} color={colors.muted} />
@@ -394,10 +482,35 @@ export default function HomeScreen() {
   return (
     <ScreenContainer>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.foreground }]}>{t("notes.title")}</Text>
-        <Text style={[styles.subtitle, { color: colors.muted }]}>
-          {state.recordings.length}{t("common.recording_noun")}
-        </Text>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={[styles.title, { color: colors.foreground }]}>{t("notes.title")}</Text>
+            <Text style={[styles.subtitle, { color: colors.muted }]}>
+              {state.recordings.length}{t("common.recording_noun")}
+            </Text>
+          </View>
+          {state.recordings.length > 0 && (
+            <TouchableOpacity
+              onPress={handleToggleSelectMode}
+              style={[
+                styles.selectModeButton,
+                {
+                  backgroundColor: isSelectMode ? colors.primary + "20" : colors.surface,
+                  borderColor: isSelectMode ? colors.primary : colors.border,
+                },
+              ]}
+            >
+              <IconSymbol
+                name={isSelectMode ? "xmark" : "checkmark.circle"}
+                size={16}
+                color={isSelectMode ? colors.primary : colors.muted}
+              />
+              <Text style={[styles.selectModeText, { color: isSelectMode ? colors.primary : colors.muted }]}>
+                {isSelectMode ? "キャンセル" : "選択"}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <View style={[styles.searchContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -526,11 +639,15 @@ export default function HomeScreen() {
             onPress={() => handleRecordingPress(item.id)}
             onDelete={() => handleDelete(item.id)}
             columns={columns}
+            isSelectMode={isSelectMode}
+            isSelected={selectedIds.has(item.id)}
+            onToggleSelection={() => handleToggleSelection(item.id)}
           />
         )}
         contentContainerStyle={[
           styles.listContent,
           isDesktop && styles.listContentDesktop,
+          isSelectMode && { paddingBottom: 160 },
         ]}
         columnWrapperStyle={columns > 1 ? styles.columnWrapper : undefined}
         ListEmptyComponent={renderEmptyState}
@@ -541,6 +658,40 @@ export default function HomeScreen() {
         windowSize={5}
         removeClippedSubviews={true}
       />
+
+      {/* Bottom action bar for batch operations */}
+      {isSelectMode && (
+        <View style={[styles.batchActionBar, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+          <View style={styles.batchActionInfo}>
+            <Text style={[styles.batchActionCount, { color: colors.foreground }]}>
+              {selectedIds.size}件選択中
+            </Text>
+            <View style={styles.batchActionButtons}>
+              <TouchableOpacity
+                onPress={selectedIds.size === filteredRecordings.length ? handleDeselectAll : handleSelectAll}
+                style={[styles.batchActionButton, { borderColor: colors.border }]}
+              >
+                <Text style={[styles.batchActionButtonText, { color: colors.primary }]}>
+                  {selectedIds.size === filteredRecordings.length ? "全解除" : "全選択"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          <TouchableOpacity
+            onPress={handleBatchDelete}
+            disabled={selectedIds.size === 0}
+            style={[
+              styles.batchDeleteButton,
+              {
+                backgroundColor: selectedIds.size > 0 ? colors.error : colors.muted + "40",
+              },
+            ]}
+          >
+            <IconSymbol name="trash.fill" size={18} color="#FFFFFF" />
+            <Text style={styles.batchDeleteText}>削除</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </ScreenContainer>
   );
 }
@@ -551,6 +702,11 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 16,
   },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
   title: {
     fontSize: 32,
     fontWeight: "700",
@@ -558,6 +714,19 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     marginTop: 4,
+  },
+  selectModeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+  },
+  selectModeText: {
+    fontSize: 14,
+    fontWeight: "500",
   },
   searchContainer: {
     flexDirection: "row",
@@ -638,6 +807,17 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     flex: 1,
     marginRight: 8,
+  },
+  cardTitleWithCheckbox: {
+    marginLeft: 8,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    justifyContent: "center",
+    alignItems: "center",
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -754,5 +934,54 @@ const styles = StyleSheet.create({
   moreTagsText: {
     fontSize: 11,
     alignSelf: "center",
+  },
+  batchActionBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingBottom: 40,
+    borderTopWidth: 1,
+  },
+  batchActionInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  batchActionCount: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  batchActionButtons: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  batchActionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  batchActionButtonText: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  batchDeleteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  batchDeleteText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
