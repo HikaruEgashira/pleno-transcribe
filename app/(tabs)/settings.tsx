@@ -8,6 +8,7 @@ import {
   Alert,
   Switch,
   Platform,
+  TextInput,
 } from "react-native";
 import Constants from "expo-constants";
 
@@ -20,9 +21,16 @@ import { useThemeContext } from "@/packages/lib/theme-provider";
 import { useTranslation } from "@/packages/lib/i18n/context";
 import { trpc } from "@/packages/lib/trpc";
 
-type SummaryTemplate = "general" | "meeting" | "interview" | "lecture";
+type SummaryTemplate = "general" | "meeting" | "interview" | "lecture" | string;
 type Language = "ja" | "en" | "auto";
 type TranscriptionProvider = "elevenlabs" | "gemini";
+
+interface CustomTemplate {
+  id: string;
+  name: string;
+  prompt: string;
+  createdAt: Date;
+}
 
 interface SettingsState {
   language: Language;
@@ -60,6 +68,7 @@ const TRANSLATION_LANGUAGES: { value: string; label: string }[] = [
 ];
 
 const SETTINGS_KEY = "app-settings";
+const CUSTOM_TEMPLATES_KEY = "custom-templates";
 
 export default function SettingsScreen() {
   const colors = useColors();
@@ -84,7 +93,12 @@ export default function SettingsScreen() {
     },
   });
 
-  // Load settings on mount
+  const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>([]);
+  const [showTemplateForm, setShowTemplateForm] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState("");
+  const [newTemplatePrompt, setNewTemplatePrompt] = useState("");
+
+  // Load settings and custom templates on mount
   useEffect(() => {
     const loadSettings = async () => {
       try {
@@ -104,6 +118,17 @@ export default function SettingsScreen() {
               ...(savedSettings.realtimeTranslation || {}),
             },
           }));
+        }
+
+        // Load custom templates
+        const savedTemplates = await Storage.getItem(CUSTOM_TEMPLATES_KEY);
+        if (savedTemplates) {
+          const templates: CustomTemplate[] = JSON.parse(savedTemplates);
+          // Parse dates
+          setCustomTemplates(templates.map(t => ({
+            ...t,
+            createdAt: new Date(t.createdAt),
+          })));
         }
       } catch (error) {
         console.error("Failed to load settings:", error);
@@ -267,6 +292,37 @@ export default function SettingsScreen() {
         Alert.alert("エラー", "インポートに失敗しました");
       }
     }
+  };
+
+  const handleCreateTemplate = async () => {
+    if (!newTemplateName.trim() || !newTemplatePrompt.trim()) {
+      Alert.alert("エラー", "テンプレート名とプロンプトを入力してください");
+      return;
+    }
+
+    const newTemplate: CustomTemplate = {
+      id: Date.now().toString(),
+      name: newTemplateName.trim(),
+      prompt: newTemplatePrompt.trim(),
+      createdAt: new Date(),
+    };
+
+    const updatedTemplates = [...customTemplates, newTemplate];
+    setCustomTemplates(updatedTemplates);
+    await Storage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(updatedTemplates));
+
+    // Reset form
+    setNewTemplateName("");
+    setNewTemplatePrompt("");
+    setShowTemplateForm(false);
+
+    Alert.alert("完了", "カスタムテンプレートを作成しました");
+  };
+
+  const handleDeleteTemplate = async (templateId: string) => {
+    const updated = customTemplates.filter(t => t.id !== templateId);
+    setCustomTemplates(updated);
+    await Storage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(updated));
   };
 
   const totalDuration = recordingsState.recordings.reduce((sum, r) => sum + r.duration, 0);
@@ -450,6 +506,108 @@ export default function SettingsScreen() {
               )}
             </TouchableOpacity>
           ))}
+
+          {/* Custom Templates */}
+          {customTemplates.length > 0 && (
+            <View style={[styles.customTemplatesSection, { borderTopColor: colors.border }]}>
+              <Text style={[styles.subsectionTitle, { color: colors.foreground }]}>
+                カスタムテンプレート ({customTemplates.length})
+              </Text>
+              {customTemplates.map((template) => (
+                <View
+                  key={template.id}
+                  style={[
+                    styles.customTemplateItem,
+                    { backgroundColor: colors.background, borderColor: colors.border }
+                  ]}
+                >
+                  <TouchableOpacity
+                    style={{ flex: 1 }}
+                    onPress={() => handleTemplateChange(template.id)}
+                  >
+                    <Text style={[styles.customTemplateName, { color: colors.foreground }]}>
+                      {template.name}
+                    </Text>
+                    <Text
+                      style={[styles.customTemplatePrompt, { color: colors.muted }]}
+                      numberOfLines={2}
+                    >
+                      {template.prompt}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleDeleteTemplate(template.id)}
+                    style={styles.deleteButton}
+                  >
+                    <IconSymbol name="xmark" size={18} color={colors.error} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Add Custom Template Button */}
+          <TouchableOpacity
+            onPress={() => setShowTemplateForm(!showTemplateForm)}
+            style={[styles.addTemplateButton, { backgroundColor: colors.primary + "15" }]}
+          >
+            <IconSymbol name="plus" size={18} color={colors.primary} />
+            <Text style={[styles.addTemplateButtonText, { color: colors.primary }]}>
+              カスタムテンプレートを追加
+            </Text>
+          </TouchableOpacity>
+
+          {/* Template Form */}
+          {showTemplateForm && (
+            <View style={[styles.templateForm, { backgroundColor: colors.background, borderColor: colors.border }]}>
+              <Text style={[styles.formLabel, { color: colors.foreground }]}>テンプレート名</Text>
+              <TextInput
+                style={[
+                  styles.textInput,
+                  { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.surface }
+                ]}
+                placeholder="例: マーケティング会議"
+                placeholderTextColor={colors.muted}
+                value={newTemplateName}
+                onChangeText={setNewTemplateName}
+              />
+
+              <Text style={[styles.formLabel, { color: colors.foreground, marginTop: 16 }]}>
+                プロンプト
+              </Text>
+              <TextInput
+                style={[
+                  styles.textInputMultiline,
+                  { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.surface }
+                ]}
+                placeholder="カスタマイズしたプロンプトを入力してください"
+                placeholderTextColor={colors.muted}
+                value={newTemplatePrompt}
+                onChangeText={setNewTemplatePrompt}
+                multiline
+                numberOfLines={4}
+              />
+
+              <View style={styles.formButtons}>
+                <TouchableOpacity
+                  onPress={handleCreateTemplate}
+                  style={[styles.formButton, { backgroundColor: colors.primary }]}
+                >
+                  <Text style={styles.formButtonText}>作成</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowTemplateForm(false);
+                    setNewTemplateName("");
+                    setNewTemplatePrompt("");
+                  }}
+                  style={[styles.formButton, { backgroundColor: colors.muted + "20" }]}
+                >
+                  <Text style={[styles.formButtonText, { color: colors.foreground }]}>キャンセル</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Auto Processing */}
@@ -866,5 +1024,91 @@ const styles = StyleSheet.create({
   footerSubtext: {
     fontSize: 12,
     marginTop: 4,
+  },
+  customTemplatesSection: {
+    borderTopWidth: 1,
+    marginTop: 12,
+    paddingTop: 12,
+  },
+  subsectionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 10,
+  },
+  customTemplateItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 8,
+    gap: 8,
+  },
+  customTemplateName: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  customTemplatePrompt: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  deleteButton: {
+    padding: 6,
+  },
+  addTemplateButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 8,
+    marginTop: 12,
+  },
+  addTemplateButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  templateForm: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 16,
+    marginTop: 12,
+  },
+  formLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  textInputMultiline: {
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    textAlignVertical: "top",
+  },
+  formButtons: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 16,
+  },
+  formButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 6,
+    alignItems: "center",
+  },
+  formButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 });
