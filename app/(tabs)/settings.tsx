@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Text,
   View,
@@ -367,6 +367,60 @@ export default function SettingsScreen() {
   const transcribedCount = recordingsState.recordings.filter((r) => r.transcript).length;
   const summarizedCount = recordingsState.recordings.filter((r) => r.summary).length;
 
+  // 拡張統計
+  const stats = useMemo(() => {
+    const recordings = recordingsState.recordings;
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // 今週の録音
+    const thisWeekRecordings = recordings.filter((r) => new Date(r.createdAt) >= weekAgo);
+
+    // 感情分析統計
+    const sentimentCounts = {
+      positive: recordings.filter((r) => r.sentiment?.overallSentiment === "positive").length,
+      neutral: recordings.filter((r) => r.sentiment?.overallSentiment === "neutral").length,
+      negative: recordings.filter((r) => r.sentiment?.overallSentiment === "negative").length,
+    };
+
+    // タグ統計
+    const tagCounts: Record<string, number> = {};
+    recordings.forEach((r) => {
+      r.tags.forEach((t) => {
+        tagCounts[t.name] = (tagCounts[t.name] || 0) + 1;
+      });
+    });
+    const topTags = Object.entries(tagCounts)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5)
+      .map(([name, count]) => ({ name, count }));
+
+    // アクションアイテム統計
+    const allActionItems = recordings.flatMap((r) => r.actionItems);
+    const pendingActions = allActionItems.filter((a) => !a.completed).length;
+    const highPriorityActions = allActionItems.filter((a) => a.priority === "high" && !a.completed).length;
+
+    // 処理率
+    const transcriptionRate = recordings.length > 0
+      ? Math.round((transcribedCount / recordings.length) * 100)
+      : 0;
+    const summarizationRate = transcribedCount > 0
+      ? Math.round((summarizedCount / transcribedCount) * 100)
+      : 0;
+
+    return {
+      thisWeekCount: thisWeekRecordings.length,
+      thisWeekDuration: thisWeekRecordings.reduce((sum, r) => sum + r.duration, 0),
+      sentimentCounts,
+      topTags,
+      pendingActions,
+      highPriorityActions,
+      transcriptionRate,
+      summarizationRate,
+    };
+  }, [recordingsState.recordings, transcribedCount, summarizedCount]);
+
   return (
     <ScreenContainer>
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -377,6 +431,8 @@ export default function SettingsScreen() {
         {/* Statistics */}
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>統計</Text>
+
+          {/* Basic Stats */}
           <View style={styles.statsGrid}>
             <View style={styles.statItem}>
               <Text style={[styles.statValue, { color: colors.primary }]}>
@@ -399,6 +455,109 @@ export default function SettingsScreen() {
               <Text style={[styles.statLabel, { color: colors.muted }]}>要約済</Text>
             </View>
           </View>
+
+          {/* This Week */}
+          <View style={[styles.statsSubsection, { borderTopColor: colors.border }]}>
+            <Text style={[styles.statsSubsectionTitle, { color: colors.foreground }]}>今週</Text>
+            <View style={styles.statsRow}>
+              <View style={styles.statsRowItem}>
+                <Text style={[styles.statsRowValue, { color: colors.primary }]}>{stats.thisWeekCount}</Text>
+                <Text style={[styles.statsRowLabel, { color: colors.muted }]}>件</Text>
+              </View>
+              <View style={styles.statsRowItem}>
+                <Text style={[styles.statsRowValue, { color: colors.primary }]}>{Math.floor(stats.thisWeekDuration / 60)}</Text>
+                <Text style={[styles.statsRowLabel, { color: colors.muted }]}>分</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Processing Rate */}
+          <View style={[styles.statsSubsection, { borderTopColor: colors.border }]}>
+            <Text style={[styles.statsSubsectionTitle, { color: colors.foreground }]}>処理率</Text>
+            <View style={styles.progressBars}>
+              <View style={styles.progressBarRow}>
+                <Text style={[styles.progressBarLabel, { color: colors.muted }]}>文字起こし</Text>
+                <View style={[styles.progressBarBg, { backgroundColor: colors.border }]}>
+                  <View
+                    style={[
+                      styles.progressBarFill,
+                      { width: `${stats.transcriptionRate}%`, backgroundColor: colors.success },
+                    ]}
+                  />
+                </View>
+                <Text style={[styles.progressBarValue, { color: colors.foreground }]}>{stats.transcriptionRate}%</Text>
+              </View>
+              <View style={styles.progressBarRow}>
+                <Text style={[styles.progressBarLabel, { color: colors.muted }]}>要約</Text>
+                <View style={[styles.progressBarBg, { backgroundColor: colors.border }]}>
+                  <View
+                    style={[
+                      styles.progressBarFill,
+                      { width: `${stats.summarizationRate}%`, backgroundColor: colors.secondary },
+                    ]}
+                  />
+                </View>
+                <Text style={[styles.progressBarValue, { color: colors.foreground }]}>{stats.summarizationRate}%</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Sentiment Distribution */}
+          {(stats.sentimentCounts.positive + stats.sentimentCounts.neutral + stats.sentimentCounts.negative) > 0 && (
+            <View style={[styles.statsSubsection, { borderTopColor: colors.border }]}>
+              <Text style={[styles.statsSubsectionTitle, { color: colors.foreground }]}>感情分析</Text>
+              <View style={styles.sentimentRow}>
+                <View style={[styles.sentimentItem, { backgroundColor: colors.success + "20" }]}>
+                  <IconSymbol name="face.smiling" size={16} color={colors.success} />
+                  <Text style={[styles.sentimentCount, { color: colors.success }]}>{stats.sentimentCounts.positive}</Text>
+                </View>
+                <View style={[styles.sentimentItem, { backgroundColor: colors.muted + "20" }]}>
+                  <IconSymbol name="face.dashed" size={16} color={colors.muted} />
+                  <Text style={[styles.sentimentCount, { color: colors.muted }]}>{stats.sentimentCounts.neutral}</Text>
+                </View>
+                <View style={[styles.sentimentItem, { backgroundColor: colors.error + "20" }]}>
+                  <IconSymbol name="face.frowning" size={16} color={colors.error} />
+                  <Text style={[styles.sentimentCount, { color: colors.error }]}>{stats.sentimentCounts.negative}</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Action Items */}
+          {stats.pendingActions > 0 && (
+            <View style={[styles.statsSubsection, { borderTopColor: colors.border }]}>
+              <Text style={[styles.statsSubsectionTitle, { color: colors.foreground }]}>未完了タスク</Text>
+              <View style={styles.actionStatsRow}>
+                <View style={styles.actionStatItem}>
+                  <Text style={[styles.actionStatValue, { color: colors.warning }]}>{stats.pendingActions}</Text>
+                  <Text style={[styles.actionStatLabel, { color: colors.muted }]}>件</Text>
+                </View>
+                {stats.highPriorityActions > 0 && (
+                  <View style={[styles.actionStatBadge, { backgroundColor: colors.error + "20" }]}>
+                    <IconSymbol name="exclamationmark.triangle.fill" size={12} color={colors.error} />
+                    <Text style={[styles.actionStatBadgeText, { color: colors.error }]}>
+                      高優先度 {stats.highPriorityActions}件
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* Top Tags */}
+          {stats.topTags.length > 0 && (
+            <View style={[styles.statsSubsection, { borderTopColor: colors.border }]}>
+              <Text style={[styles.statsSubsectionTitle, { color: colors.foreground }]}>よく使うタグ</Text>
+              <View style={styles.topTagsRow}>
+                {stats.topTags.map((tag) => (
+                  <View key={tag.name} style={[styles.topTagItem, { backgroundColor: colors.primary + "15" }]}>
+                    <Text style={[styles.topTagName, { color: colors.primary }]}>{tag.name}</Text>
+                    <Text style={[styles.topTagCount, { color: colors.primary }]}>{tag.count}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Language */}
