@@ -317,6 +317,14 @@ export default function HomeScreen() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const [showSearchHistory, setShowSearchHistory] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+
+  // 表示モードに基づいてカラム数を計算
+  const effectiveColumns = useMemo(() => {
+    if (viewMode === "list") return 1;
+    // グリッドモードではレスポンシブのカラム数を使用
+    return columns;
+  }, [viewMode, columns]);
 
   // 検索履歴をロード
   useEffect(() => {
@@ -677,23 +685,35 @@ export default function HomeScreen() {
             </View>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          onPress={() => {
-            const orders: ("newest" | "oldest" | "longest" | "shortest")[] = ["newest", "oldest", "longest", "shortest"];
-            const currentIndex = orders.indexOf(sortOrder);
-            setSortOrder(orders[(currentIndex + 1) % orders.length]);
-          }}
-          style={[styles.sortButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-        >
-          <IconSymbol
-            name={sortOrder === "newest" || sortOrder === "oldest" ? "calendar" : "clock"}
-            size={14}
-            color={colors.muted}
-          />
-          <Text style={[styles.sortText, { color: colors.muted }]}>
-            {sortOrder === "newest" ? "新しい順" : sortOrder === "oldest" ? "古い順" : sortOrder === "longest" ? "長い順" : "短い順"}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.sortAndViewButtons}>
+          <TouchableOpacity
+            onPress={() => setViewMode(viewMode === "list" ? "grid" : "list")}
+            style={[styles.viewModeButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          >
+            <IconSymbol
+              name={viewMode === "list" ? "square.grid.2x2" : "list.bullet"}
+              size={14}
+              color={colors.muted}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              const orders: ("newest" | "oldest" | "longest" | "shortest")[] = ["newest", "oldest", "longest", "shortest"];
+              const currentIndex = orders.indexOf(sortOrder);
+              setSortOrder(orders[(currentIndex + 1) % orders.length]);
+            }}
+            style={[styles.sortButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          >
+            <IconSymbol
+              name={sortOrder === "newest" || sortOrder === "oldest" ? "calendar" : "clock"}
+              size={14}
+              color={colors.muted}
+            />
+            <Text style={[styles.sortText, { color: colors.muted }]}>
+              {sortOrder === "newest" ? "新しい順" : sortOrder === "oldest" ? "古い順" : sortOrder === "longest" ? "長い順" : "短い順"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Tag Filter */}
@@ -753,14 +773,14 @@ export default function HomeScreen() {
       <FlatList
         data={filteredRecordings}
         keyExtractor={(item) => item.id}
-        key={`grid-${columns}`}
-        numColumns={columns}
+        key={`grid-${effectiveColumns}`}
+        numColumns={effectiveColumns}
         renderItem={({ item }) => (
           <RecordingCard
             recording={item}
             onPress={() => handleRecordingPress(item.id)}
             onDelete={() => handleDelete(item.id)}
-            columns={columns}
+            columns={effectiveColumns}
             isSelectMode={isSelectMode}
             isSelected={selectedIds.has(item.id)}
             onToggleSelection={() => handleToggleSelection(item.id)}
@@ -771,7 +791,7 @@ export default function HomeScreen() {
           isDesktop && styles.listContentDesktop,
           isSelectMode && { paddingBottom: 160 },
         ]}
-        columnWrapperStyle={columns > 1 ? styles.columnWrapper : undefined}
+        columnWrapperStyle={effectiveColumns > 1 ? styles.columnWrapper : undefined}
         ListEmptyComponent={renderEmptyState}
         showsVerticalScrollIndicator={false}
         // パフォーマンス最適化: 大量データ対応
@@ -923,6 +943,20 @@ const styles = StyleSheet.create({
   filterButtons: {
     flexDirection: "row",
     gap: 8,
+    flexWrap: "wrap",
+  },
+  sortAndViewButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  viewModeButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
   },
   sortButton: {
     flexDirection: "row",

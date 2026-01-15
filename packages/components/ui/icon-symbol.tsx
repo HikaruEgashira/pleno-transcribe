@@ -41,6 +41,8 @@ const MAPPING: Record<string, ComponentProps<typeof MaterialIcons>["name"]> = {
   "face.smiling": "mood",
   "face.dashed": "sentiment-neutral",
   "face.frowning": "mood-bad",
+  "square.grid.2x2": "grid-view",
+  "list.bullet": "view-list",
 };
 
 /**
