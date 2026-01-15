@@ -83,6 +83,15 @@ export interface SentimentAnalysis {
   processedAt: Date;
 }
 
+export interface Keyword {
+  id: string;
+  text: string;
+  importance: 'high' | 'medium' | 'low';
+  confidence: number; // 0-1
+  frequency: number; // How many times mentioned
+  startIndex: number; // First occurrence in text
+}
+
 export interface Recording {
   id: string;
   title: string;
@@ -97,6 +106,7 @@ export interface Recording {
   tags: Tag[];
   actionItems: ActionItem[];
   sentiment?: SentimentAnalysis;
+  keywords: Keyword[];
   qaHistory: QAMessage[];
   status: 'recording' | 'saved' | 'transcribing' | 'transcribed' | 'summarizing' | 'summarized';
   /** リアルタイム文字起こし（録音中の一時データ） */

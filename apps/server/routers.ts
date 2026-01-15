@@ -578,6 +578,84 @@ JSON形式で以下のように出力してください:
           throw new Error(`感情分析に失敗しました: ${errorMessage}`);
         }
       }),
+
+    // Extract keywords from transcript text
+    extractKeywords: publicProcedure
+      .input(z.object({
+        text: z.string(),
+        maxKeywords: z.number().default(10),
+      }))
+      .mutation(async ({ input }) => {
+        try {
+          const prompt = `以下のテキストから、最大${input.maxKeywords}個の重要なキーワード・キーフレーズを抽出してください。業界用語、重要な概念、繰り返し言及される主題を優先してください。
+
+テキスト:
+${input.text}
+
+各キーワードについて、重要度（high/medium/low）、信頼度（0-1）、出現頻度を判定してください。
+
+JSON形式で以下のように出力してください:
+[
+  {"text": "キーワード1", "importance": "high", "confidence": 0.95, "frequency": 3},
+  {"text": "キーワード2", "importance": "medium", "confidence": 0.87, "frequency": 2}
+]
+
+必ずJSON配列のみを返してください。`;
+
+          const result = await invokeLLM({
+            messages: [
+              {
+                role: "system",
+                content: "あなたはテキスト分析の専門家です。テキストから重要なキーワードを抽出します。",
+              },
+              {
+                role: "user",
+                content: prompt,
+              },
+            ],
+            maxTokens: 1000,
+          });
+
+          const content = result.choices[0]?.message?.content;
+          if (!content) {
+            throw new Error("LLMから応答が得られません");
+          }
+
+          // Extract JSON from response
+          const jsonMatch = content.match(/\[[\s\S]*\]/);
+          const jsonStr = jsonMatch ? jsonMatch[0] : content;
+          const parsed = JSON.parse(jsonStr);
+
+          // Calculate startIndex for each keyword in the original text
+          const keywords = Array.isArray(parsed)
+            ? parsed.map((kw: any, i: number) => ({
+                id: Date.now().toString() + i,
+                text: String(kw.text || "").trim(),
+                importance: ['high', 'medium', 'low'].includes(kw.importance) ? kw.importance : 'medium',
+                confidence: Math.min(1, Math.max(0, Number(kw.confidence) || 0.5)),
+                frequency: Math.max(1, Number(kw.frequency) || 1),
+                startIndex: input.text.toLowerCase().indexOf((kw.text || "").toLowerCase()),
+              }))
+            : [];
+
+          // Sort by importance and confidence
+          const importanceOrder = { high: 0, medium: 1, low: 2 };
+          return {
+            keywords: keywords
+              .filter((k: any) => k.text.length > 0 && k.startIndex >= 0)
+              .sort((a: any, b: any) => {
+                const importanceDiff = importanceOrder[a.importance as keyof typeof importanceOrder] - importanceOrder[b.importance as keyof typeof importanceOrder];
+                if (importanceDiff !== 0) return importanceDiff;
+                return (b.confidence || 0) - (a.confidence || 0);
+              })
+              .slice(0, input.maxKeywords),
+          };
+        } catch (error) {
+          console.error("[TRPC] Extract keywords error:", error);
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          throw new Error(`キーワード抽出に失敗しました: ${errorMessage}`);
+        }
+      }),
   }),
 });
 
