@@ -4,6 +4,8 @@ export interface Highlight {
   id: string;
   timestamp: number;
   label?: string;
+  /** 周辺のテキスト文脈 */
+  context?: string;
 }
 
 export interface TranscriptSegment {
