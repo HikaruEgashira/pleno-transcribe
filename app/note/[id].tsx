@@ -450,10 +450,28 @@ const handleSummarize = async () => {
 
   const handleAddHighlight = async (label?: string) => {
     if (!recording) return;
+
+    // Extract context from transcript if available
+    let context: string | undefined;
+    if (recording.transcript && recording.duration > 0) {
+      const textLength = recording.transcript.text.length;
+      const ratio = currentTime / recording.duration;
+      const centerIndex = Math.floor(ratio * textLength);
+      // Get approximately 100 characters before and after
+      const contextRadius = 100;
+      const startIndex = Math.max(0, centerIndex - contextRadius);
+      const endIndex = Math.min(textLength, centerIndex + contextRadius);
+      context = recording.transcript.text.substring(startIndex, endIndex).trim();
+      // Add ellipsis if truncated
+      if (startIndex > 0) context = "..." + context;
+      if (endIndex < textLength) context = context + "...";
+    }
+
     const highlight = {
       id: Date.now().toString(),
       timestamp: currentTime,
       label: label || undefined,
+      context,
     };
     await addHighlight(recording.id, highlight);
     Haptics.impact("medium");
@@ -821,13 +839,23 @@ const handleSummarize = async () => {
                         onPress={() => handleSeek(h.timestamp)}
                         style={styles.highlightContent}
                       >
-                        <IconSymbol name="star.fill" size={16} color={colors.highlight} />
-                        <Text style={[styles.highlightTime, { color: colors.foreground }]}>
-                          {formatTime(h.timestamp)}
-                        </Text>
-                        {h.label && (
-                          <Text style={[styles.highlightLabel, { color: colors.muted }]}>
-                            {h.label}
+                        <View style={styles.highlightHeader}>
+                          <IconSymbol name="star.fill" size={16} color={colors.highlight} />
+                          <Text style={[styles.highlightTime, { color: colors.foreground }]}>
+                            {formatTime(h.timestamp)}
+                          </Text>
+                          {h.label && (
+                            <Text style={[styles.highlightLabel, { color: colors.muted }]}>
+                              {h.label}
+                            </Text>
+                          )}
+                        </View>
+                        {h.context && (
+                          <Text
+                            style={[styles.highlightContext, { color: colors.muted }]}
+                            numberOfLines={2}
+                          >
+                            {h.context}
                           </Text>
                         )}
                       </TouchableOpacity>
@@ -1703,9 +1731,17 @@ const styles = StyleSheet.create({
   },
   highlightContent: {
     flex: 1,
+    gap: 4,
+  },
+  highlightHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  highlightContext: {
+    fontSize: 12,
+    lineHeight: 18,
+    marginLeft: 24,
   },
   highlightDeleteButton: {
     padding: 6,
