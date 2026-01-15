@@ -113,6 +113,9 @@ export default function NoteDetailScreen() {
   // Sentiment analysis mutation
   const sentimentMutation = trpc.ai.analyzeSentiment.useMutation();
 
+  // Export mutation
+  const exportMutation = trpc.ai.exportMarkdown.useMutation();
+
   useEffect(() => {
     setAudioModeAsync({ playsInSilentMode: true });
     return () => {
@@ -373,6 +376,78 @@ const handleSummarize = async () => {
     }
   };
 
+  const handleExportMarkdown = async () => {
+    if (!recording) return;
+
+    try {
+      const result = await exportMutation.mutateAsync({
+        recordingId: recording.id,
+        title: recording.title,
+        transcript: recording.transcript ? {
+          text: recording.transcript.text,
+          segments: recording.transcript.segments.map(s => ({
+            text: s.text,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            speaker: s.speaker,
+          })),
+        } : undefined,
+        summary: recording.summary ? {
+          overview: recording.summary.overview,
+          keyPoints: recording.summary.keyPoints,
+          actionItems: recording.summary.actionItems,
+        } : undefined,
+        keywords: recording.keywords.map(k => ({
+          text: k.text,
+          importance: k.importance,
+          frequency: k.frequency,
+        })),
+        tags: recording.tags.map(t => ({ name: t.name })),
+        actionItems: recording.actionItems.map(a => ({
+          text: a.text,
+          priority: a.priority,
+          completed: a.completed,
+        })),
+        sentiment: recording.sentiment ? {
+          overallSentiment: recording.sentiment.overallSentiment,
+          summary: recording.sentiment.summary,
+        } : undefined,
+      });
+
+      if (result.markdown) {
+        // Web: ダウンロードリンクを作成
+        if (Platform.OS === "web") {
+          const blob = new Blob([result.markdown], { type: "text/markdown" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = result.filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        } else {
+          // Native: ファイルを保存
+          const fileUri = `${FileSystem.cacheDirectory}${result.filename}`;
+          await FileSystem.writeAsString(fileUri, result.markdown, {
+            encoding: FileSystem.EncodingType.UTF8,
+          });
+          // 共有シートを表示
+          const { shareAsync } = await import("expo-sharing");
+          await shareAsync(fileUri);
+        }
+      }
+    } catch (error) {
+      console.error("Export error:", error);
+      if (Platform.OS !== "web") {
+        const { Alert } = await import("react-native");
+        Alert.alert("エラー", "エクスポートに失敗しました");
+      } else {
+        alert("エクスポートに失敗しました");
+      }
+    }
+  };
+
   const handleAskQuestion = async () => {
     if (!recording?.transcript || !qaInput.trim()) return;
 
@@ -451,6 +526,17 @@ const handleSummarize = async () => {
               {formatTime(recording.duration)}
             </Text>
           </View>
+          <TouchableOpacity
+            onPress={handleExportMarkdown}
+            disabled={exportMutation.isPending}
+            style={[styles.exportButton, { backgroundColor: colors.surface }]}
+          >
+            {exportMutation.isPending ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <IconSymbol name="square.and.arrow.up" size={20} color={colors.primary} />
+            )}
+          </TouchableOpacity>
         </View>
 
         {/* Tabs */}
@@ -1103,6 +1189,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  exportButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
