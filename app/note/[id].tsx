@@ -396,6 +396,15 @@ const handleSummarize = async () => {
     setEditingActionItemDueDate(null);
   };
 
+  const handleJumpToTimestamp = (timestamp?: number) => {
+    if (!recording) return;
+    if (timestamp !== undefined && timestamp >= 0 && timestamp <= recording.duration) {
+      handleSeek(timestamp);
+      // スクロールしてオーディオタブに移動
+      setActiveTab("audio");
+    }
+  };
+
   const handleExtractKeywords = async () => {
     if (!recording?.transcript) return;
 
@@ -1036,6 +1045,17 @@ const handleSummarize = async () => {
                                 )}
                               </TouchableOpacity>
                             )}
+                            {item.associatedTimestamp !== undefined && item.associatedTimestamp >= 0 && (
+                              <TouchableOpacity
+                                onPress={() => handleJumpToTimestamp(item.associatedTimestamp)}
+                                style={styles.timestampButton}
+                              >
+                                <IconSymbol name="waveform" size={14} color={colors.primary} />
+                                <Text style={[styles.timestampButtonText, { color: colors.primary }]}>
+                                  {formatTime(item.associatedTimestamp)}
+                                </Text>
+                              </TouchableOpacity>
+                            )}
                           </View>
                         ))}
                       </View>
@@ -1073,31 +1093,48 @@ const handleSummarize = async () => {
                     </View>
                     {recording.keywords.length > 0 ? (
                       <View style={styles.tagsContainer}>
-                        {recording.keywords.map((keyword) => (
-                          <View
-                            key={keyword.id}
-                            style={[
-                              styles.keywordChip,
-                              {
-                                backgroundColor:
-                                  keyword.importance === 'high'
-                                    ? colors.primary + '30'
-                                    : keyword.importance === 'medium'
-                                    ? colors.primary + '20'
-                                    : colors.primary + '10',
-                              },
-                            ]}
-                          >
-                            <Text style={[styles.tagText, { color: colors.primary }]}>
-                              {keyword.text}
-                            </Text>
-                            {keyword.frequency > 1 && (
-                              <Text style={[styles.keywordFrequency, { color: colors.muted }]}>
-                                ×{keyword.frequency}
-                              </Text>
-                            )}
-                          </View>
-                        ))}
+                        {recording.keywords.map((keyword) => {
+                          // Calculate approximate timestamp from text position
+                          const estimatedTime = recording.transcript
+                            ? (keyword.startIndex / recording.transcript.text.length) * recording.duration
+                            : undefined;
+
+                          return (
+                            <TouchableOpacity
+                              key={keyword.id}
+                              onPress={() => estimatedTime !== undefined && handleJumpToTimestamp(estimatedTime)}
+                              activeOpacity={0.7}
+                            >
+                              <View
+                                style={[
+                                  styles.keywordChip,
+                                  {
+                                    backgroundColor:
+                                      keyword.importance === 'high'
+                                        ? colors.primary + '30'
+                                        : keyword.importance === 'medium'
+                                        ? colors.primary + '20'
+                                        : colors.primary + '10',
+                                  },
+                                ]}
+                              >
+                                <Text style={[styles.tagText, { color: colors.primary }]}>
+                                  {keyword.text}
+                                </Text>
+                                {keyword.frequency > 1 && (
+                                  <Text style={[styles.keywordFrequency, { color: colors.muted }]}>
+                                    ×{keyword.frequency}
+                                  </Text>
+                                )}
+                                {estimatedTime !== undefined && (
+                                  <Text style={[styles.keywordTimestamp, { color: colors.muted }]}>
+                                    {formatTime(estimatedTime)}
+                                  </Text>
+                                )}
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })}
                       </View>
                     ) : (
                       <Text style={[styles.emptyTagsText, { color: colors.muted }]}>
@@ -1720,6 +1757,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  timestampButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginLeft: 30,
+  },
+  timestampButtonText: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
   keywordChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -1730,6 +1779,10 @@ const styles = StyleSheet.create({
   },
   keywordFrequency: {
     fontSize: 11,
+  },
+  keywordTimestamp: {
+    fontSize: 10,
+    fontWeight: "500",
   },
   sentimentContainer: {
     gap: 12,
