@@ -18,6 +18,7 @@ import { useRecordings } from "@/packages/lib/recordings-context";
 import { useColors } from "@/packages/hooks/use-colors";
 import { useThemeContext } from "@/packages/lib/theme-provider";
 import { useTranslation } from "@/packages/lib/i18n/context";
+import { trpc } from "@/packages/lib/trpc";
 
 type SummaryTemplate = "general" | "meeting" | "interview" | "lecture";
 type Language = "ja" | "en" | "auto";
@@ -62,7 +63,7 @@ const SETTINGS_KEY = "app-settings";
 
 export default function SettingsScreen() {
   const colors = useColors();
-  const { state: recordingsState } = useRecordings();
+  const { state: recordingsState, addRecording } = useRecordings();
   const { colorScheme, setColorScheme } = useThemeContext();
   const { t } = useTranslation();
 
@@ -170,6 +171,101 @@ export default function SettingsScreen() {
           },
         ]
       );
+    }
+  };
+
+  const importMutation = trpc.ai.importRecording.useMutation();
+
+  const handleImport = async () => {
+    Haptics.impact('light');
+
+    if (Platform.OS === "web") {
+      // Web: ファイル選択ダイアログを表示
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".json,.csv";
+      input.onchange = async (e) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (!file) return;
+
+        try {
+          const content = await file.text();
+          const format = file.name.endsWith(".csv") ? "csv" : "json";
+
+          const result = await importMutation.mutateAsync({
+            format: format as "csv" | "json",
+            data: content,
+          });
+
+          if (result.success && result.recordings) {
+            // インポートした録音をストレージに追加
+            for (const rec of result.recordings) {
+              await addRecording({
+                ...rec,
+                audioUri: "",
+                duration: 0,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                highlights: [],
+                notes: "",
+                tags: rec.tags || [],
+                actionItems: rec.actionItems || [],
+                keywords: rec.keywords || [],
+                qaHistory: [],
+                status: "saved",
+              });
+            }
+            window.alert(`${result.count}件の録音メタデータをインポートしました。`);
+          }
+        } catch (error) {
+          console.error("Import error:", error);
+          window.alert("インポートに失敗しました");
+        }
+      };
+      input.click();
+    } else {
+      // Native: DocumentPickerを使用
+      try {
+        const { getDocumentAsync } = await import("expo-document-picker");
+        const result = await getDocumentAsync({
+          type: ["application/json", "text/csv"],
+        });
+
+        if (result.canceled || !result.assets?.[0]) return;
+
+        const file = result.assets[0];
+        const response = await fetch(file.uri);
+        const content = await response.text();
+        const format = file.name?.endsWith(".csv") ? "csv" : "json";
+
+        const importResult = await importMutation.mutateAsync({
+          format: format as "csv" | "json",
+          data: content,
+        });
+
+        if (importResult.success && importResult.recordings) {
+          for (const rec of importResult.recordings) {
+            await addRecording({
+              ...rec,
+              audioUri: "",
+              duration: 0,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              highlights: [],
+              notes: "",
+              tags: rec.tags || [],
+              actionItems: rec.actionItems || [],
+              keywords: rec.keywords || [],
+              qaHistory: [],
+              status: "saved",
+            });
+          }
+          Alert.alert("完了", `${importResult.count}件の録音メタデータをインポートしました。`);
+        }
+      } catch (error) {
+        console.error("Import error:", error);
+        Alert.alert("エラー", "インポートに失敗しました");
+      }
     }
   };
 
@@ -553,6 +649,24 @@ export default function SettingsScreen() {
         <View style={[styles.section, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.foreground }]}>データ管理</Text>
           <TouchableOpacity
+            onPress={handleImport}
+            disabled={importMutation.isPending}
+            style={[styles.importButton, { borderColor: colors.primary }]}
+          >
+            {importMutation.isPending ? (
+              <Text style={[styles.importButtonText, { color: colors.primary }]}>
+                インポート中...
+              </Text>
+            ) : (
+              <>
+                <IconSymbol name="square.and.arrow.down" size={20} color={colors.primary} />
+                <Text style={[styles.importButtonText, { color: colors.primary }]}>
+                  ファイルからインポート (JSON/CSV)
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
             onPress={handleClearData}
             style={[styles.dangerButton, { borderColor: colors.error }]}
           >
@@ -688,6 +802,20 @@ const styles = StyleSheet.create({
   toggleDescription: {
     fontSize: 13,
     marginTop: 2,
+  },
+  importButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 8,
+    marginBottom: 12,
+  },
+  importButtonText: {
+    fontSize: 15,
+    fontWeight: "500",
   },
   dangerButton: {
     flexDirection: "row",
