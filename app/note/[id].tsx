@@ -34,7 +34,7 @@ export default function NoteDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const colors = useColors();
-  const { getRecording, updateRecording, setTranscript, setSummary, addQAMessage } = useRecordings();
+  const { getRecording, updateRecording, setTranscript, setSummary, addQAMessage, addHighlight } = useRecordings();
 
   const [activeTab, setActiveTab] = useState<TabType>("audio");
   const [isPlaying, setIsPlaying] = useState(false);
@@ -405,6 +405,23 @@ const handleSummarize = async () => {
     }
   };
 
+  const handleAddHighlight = async (label?: string) => {
+    if (!recording) return;
+    const highlight = {
+      id: Date.now().toString(),
+      timestamp: currentTime,
+      label: label || undefined,
+    };
+    await addHighlight(recording.id, highlight);
+    Haptics.impact("medium");
+  };
+
+  const handleDeleteHighlight = async (highlightId: string) => {
+    if (!recording) return;
+    const updatedHighlights = recording.highlights.filter(h => h.id !== highlightId);
+    await updateRecording(recording.id, { highlights: updatedHighlights });
+  };
+
   const handleExtractKeywords = async () => {
     if (!recording?.transcript) return;
 
@@ -715,28 +732,52 @@ const handleSummarize = async () => {
                 </TouchableOpacity>
               </View>
 
+              {/* Add Highlight Button */}
+              <TouchableOpacity
+                onPress={() => handleAddHighlight()}
+                style={[styles.addHighlightButton, { backgroundColor: colors.highlight + '20', borderColor: colors.highlight }]}
+              >
+                <IconSymbol name="star.fill" size={18} color={colors.highlight} />
+                <Text style={[styles.addHighlightText, { color: colors.highlight }]}>
+                  現在位置をハイライト
+                </Text>
+              </TouchableOpacity>
+
               {/* Highlights */}
               {recording.highlights.length > 0 && (
                 <View style={styles.highlightsSection}>
                   <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                    ハイライト
+                    ハイライト ({recording.highlights.length})
                   </Text>
-                  {recording.highlights.map((h) => (
-                    <TouchableOpacity
+                  {recording.highlights
+                    .slice()
+                    .sort((a, b) => a.timestamp - b.timestamp)
+                    .map((h) => (
+                    <View
                       key={h.id}
-                      onPress={() => handleSeek(h.timestamp)}
                       style={[styles.highlightItem, { backgroundColor: colors.surface }]}
                     >
-                      <IconSymbol name="star.fill" size={16} color={colors.highlight} />
-                      <Text style={[styles.highlightTime, { color: colors.foreground }]}>
-                        {formatTime(h.timestamp)}
-                      </Text>
-                      {h.label && (
-                        <Text style={[styles.highlightLabel, { color: colors.muted }]}>
-                          {h.label}
+                      <TouchableOpacity
+                        onPress={() => handleSeek(h.timestamp)}
+                        style={styles.highlightContent}
+                      >
+                        <IconSymbol name="star.fill" size={16} color={colors.highlight} />
+                        <Text style={[styles.highlightTime, { color: colors.foreground }]}>
+                          {formatTime(h.timestamp)}
                         </Text>
-                      )}
-                    </TouchableOpacity>
+                        {h.label && (
+                          <Text style={[styles.highlightLabel, { color: colors.muted }]}>
+                            {h.label}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteHighlight(h.id)}
+                        style={styles.highlightDeleteButton}
+                      >
+                        <IconSymbol name="xmark" size={14} color={colors.muted} />
+                      </TouchableOpacity>
+                    </View>
                   ))}
                 </View>
               )}
@@ -1524,6 +1565,30 @@ const styles = StyleSheet.create({
   highlightLabel: {
     fontSize: 14,
     flex: 1,
+  },
+  highlightContent: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  highlightDeleteButton: {
+    padding: 6,
+  },
+  addHighlightButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 8,
+    marginTop: 16,
+  },
+  addHighlightText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
   transcriptTab: {
     flex: 1,
