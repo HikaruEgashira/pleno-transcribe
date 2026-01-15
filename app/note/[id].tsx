@@ -345,6 +345,14 @@ const handleSummarize = async () => {
     }
   };
 
+  const handleToggleActionItem = (itemId: string) => {
+    if (!recording) return;
+    const updatedItems = recording.actionItems.map((item) =>
+      item.id === itemId ? { ...item, completed: !item.completed } : item
+    );
+    updateRecording(recording.id, { actionItems: updatedItems });
+  };
+
   const handleExtractKeywords = async () => {
     if (!recording?.transcript) return;
 
@@ -847,7 +855,25 @@ const handleSummarize = async () => {
                     {recording.actionItems.length > 0 ? (
                       <View style={styles.actionItemsList}>
                         {recording.actionItems.map((item) => (
-                          <View key={item.id} style={styles.actionItemRow}>
+                          <TouchableOpacity
+                            key={item.id}
+                            style={styles.actionItemRow}
+                            onPress={() => handleToggleActionItem(item.id)}
+                            activeOpacity={0.7}
+                          >
+                            <View
+                              style={[
+                                styles.checkbox,
+                                {
+                                  backgroundColor: item.completed ? colors.success : 'transparent',
+                                  borderColor: item.completed ? colors.success : colors.border,
+                                },
+                              ]}
+                            >
+                              {item.completed && (
+                                <IconSymbol name="checkmark" size={12} color="#FFFFFF" />
+                              )}
+                            </View>
                             <View
                               style={[
                                 styles.priorityBadge,
@@ -877,10 +903,18 @@ const handleSummarize = async () => {
                                 {item.priority === 'high' ? '高' : item.priority === 'medium' ? '中' : '低'}
                               </Text>
                             </View>
-                            <Text style={[styles.actionItemText, { color: colors.foreground }]}>
+                            <Text
+                              style={[
+                                styles.actionItemText,
+                                {
+                                  color: item.completed ? colors.muted : colors.foreground,
+                                  textDecorationLine: item.completed ? 'line-through' : 'none',
+                                },
+                              ]}
+                            >
                               {item.text}
                             </Text>
-                          </View>
+                          </TouchableOpacity>
                         ))}
                       </View>
                     ) : (
@@ -1478,6 +1512,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 10,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
   },
   priorityBadge: {
     paddingHorizontal: 8,
