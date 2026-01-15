@@ -18,6 +18,7 @@ import { IconSymbol } from "@/packages/components/ui/icon-symbol";
 import { useColors } from "@/packages/hooks/use-colors";
 import { useResponsive } from "@/packages/hooks/use-responsive";
 import { useRecordingSession } from "@/packages/lib/recording-session-context";
+import { useTranslation } from "@/packages/lib/i18n/context";
 
 function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -26,18 +27,25 @@ function formatTime(seconds: number): string {
   return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}.${ms.toString().padStart(2, "0")}`;
 }
 
-const AUDIO_SOURCE_OPTIONS: { key: AudioSource; label: string; icon: string }[] = [
-  { key: "microphone", label: "マイク", icon: "mic.fill" },
-  { key: "system", label: "システム音声", icon: "display" },
-  { key: "both", label: "両方", icon: "waveform" },
-];
+const AUDIO_SOURCE_ICONS: Record<AudioSource, string> = {
+  microphone: "mic.fill",
+  system: "display",
+  both: "waveform",
+};
 
 export default function RecordScreen() {
   const colors = useColors();
   const { isDesktop } = useResponsive();
+  const { t } = useTranslation();
   const scrollViewRef = useRef<ScrollView>(null);
   const [audioSource, setAudioSource] = useState<AudioSource>("microphone");
   const isSystemAudioSupported = Platform.OS === "web" && SystemAudioStream.isSupported();
+
+  const AUDIO_SOURCE_OPTIONS: { key: AudioSource; label: string; icon: string }[] = [
+    { key: "microphone", label: t("record.microphone"), icon: AUDIO_SOURCE_ICONS.microphone },
+    { key: "system", label: t("record.systemAudio"), icon: AUDIO_SOURCE_ICONS.system },
+    { key: "both", label: t("record.both"), icon: AUDIO_SOURCE_ICONS.both },
+  ];
 
   const {
     state,
@@ -165,7 +173,7 @@ export default function RecordScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.foreground }]}>
-            {isRecording ? "録音中" : "新規録音"}
+            {isRecording ? t("record.title_recording") : t("record.title_new")}
           </Text>
           {isRecording && (
             <View style={styles.recordingIndicator}>
@@ -262,11 +270,11 @@ export default function RecordScreen() {
               <View style={styles.realtimeHeaderLeft}>
                 <IconSymbol name="text.bubble" size={16} color={colors.primary} />
                 <Text style={[styles.realtimeTitle, { color: colors.foreground }]}>
-                  リアルタイム文字起こし
+                  {t("record.realtimeTranscription")}
                 </Text>
                 {translationEnabled && isTranslating && (
                   <Text style={[styles.translatingBadge, { color: colors.primary, backgroundColor: colors.primary + "20" }]}>
-                    翻訳中...
+                    {t("record.translating")}
                   </Text>
                 )}
               </View>
@@ -274,25 +282,25 @@ export default function RecordScreen() {
                 {realtimeState.connectionStatus === "connected" && (
                   <>
                     <View style={[styles.statusDot, { backgroundColor: colors.success }]} />
-                    <Text style={[styles.statusText, { color: colors.success }]}>接続中</Text>
+                    <Text style={[styles.statusText, { color: colors.success }]}>{t("record.connected")}</Text>
                   </>
                 )}
                 {realtimeState.connectionStatus === "connecting" && (
                   <>
                     <View style={[styles.statusDot, { backgroundColor: colors.warning }]} />
-                    <Text style={[styles.statusText, { color: colors.warning }]}>接続中...</Text>
+                    <Text style={[styles.statusText, { color: colors.warning }]}>{t("record.connecting")}</Text>
                   </>
                 )}
                 {realtimeState.connectionStatus === "disconnected" && (
                   <>
                     <View style={[styles.statusDot, { backgroundColor: colors.muted }]} />
-                    <Text style={[styles.statusText, { color: colors.muted }]}>未接続</Text>
+                    <Text style={[styles.statusText, { color: colors.muted }]}>{t("record.disconnected")}</Text>
                   </>
                 )}
                 {realtimeState.connectionStatus === "error" && (
                   <>
                     <View style={[styles.statusDot, { backgroundColor: colors.error }]} />
-                    <Text style={[styles.statusText, { color: colors.error }]}>エラー</Text>
+                    <Text style={[styles.statusText, { color: colors.error }]}>{t("common.error")}</Text>
                   </>
                 )}
               </View>
@@ -385,7 +393,7 @@ export default function RecordScreen() {
               <IconSymbol name="mic.fill" size={40} color="#FFFFFF" />
             </TouchableOpacity>
             <Text style={[styles.instructions, { color: colors.muted }]}>
-              ボタンをタップして録音を開始
+              {t("record.instructions")}
             </Text>
           </View>
         )}

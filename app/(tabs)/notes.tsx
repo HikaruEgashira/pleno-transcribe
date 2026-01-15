@@ -21,6 +21,7 @@ import { useRecordings } from "@/packages/lib/recordings-context";
 import { useColors } from "@/packages/hooks/use-colors";
 import { useResponsive } from "@/packages/hooks/use-responsive";
 import { Recording } from "@/packages/types/recording";
+import { useTranslation } from "@/packages/lib/i18n/context";
 
 function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -247,6 +248,7 @@ export default function HomeScreen() {
   const colors = useColors();
   const { columns, isDesktop } = useResponsive();
   const { state, deleteRecording } = useRecordings();
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "transcribed" | "summarized">("all");
@@ -326,9 +328,9 @@ export default function HomeScreen() {
   return (
     <ScreenContainer>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.foreground }]}>ノート</Text>
+        <Text style={[styles.title, { color: colors.foreground }]}>{t("notes.title")}</Text>
         <Text style={[styles.subtitle, { color: colors.muted }]}>
-          {state.recordings.length}件の録音
+          {state.recordings.length}{t("common.recording_noun")}
         </Text>
       </View>
 
@@ -336,7 +338,7 @@ export default function HomeScreen() {
         <IconSymbol name="magnifyingglass" size={20} color={colors.muted} />
         <TextInput
           style={[styles.searchInput, { color: colors.foreground }]}
-          placeholder="録音を検索..."
+          placeholder={t("notes.searchPlaceholder")}
           placeholderTextColor={colors.muted}
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -368,7 +370,7 @@ export default function HomeScreen() {
                 { color: filter === f ? "#FFFFFF" : colors.muted },
               ]}
             >
-              {f === "all" ? "すべて" : f === "transcribed" ? "文字起こし済" : "要約済"}
+              {f === "all" ? t("notes.allNotes") : f === "transcribed" ? t("notes.transcribed") : t("notes.summarized")}
             </Text>
           </TouchableOpacity>
         ))}
