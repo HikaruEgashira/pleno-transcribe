@@ -182,6 +182,9 @@ export default function NoteDetailScreen() {
   // Sentiment analysis mutation
   const sentimentMutation = trpc.ai.analyzeSentiment.useMutation();
 
+  // Translation mutation
+  const translateMutation = trpc.ai.translate.useMutation();
+
   // Export mutation
   const exportMutation = trpc.ai.exportMarkdown.useMutation();
 
@@ -556,6 +559,36 @@ const handleSummarize = async () => {
       }
     } catch (error) {
       console.error("Sentiment analysis error:", error);
+    }
+  };
+
+  const handleTranslate = async (targetLanguage: string) => {
+    if (!recording || !recording.transcript) return;
+
+    setIsProcessing(true);
+    try {
+      const result = await translateMutation.mutateAsync({
+        texts: [{ id: "main", text: recording.transcript.text }],
+        targetLanguage,
+      });
+
+      if (result.translations && result.translations.length > 0) {
+        const translatedText = result.translations[0].translatedText;
+        // Update transcript with translation
+        const updatedTranscript = {
+          ...recording.transcript,
+          translation: {
+            targetLanguage,
+            text: translatedText,
+          },
+        };
+        setTranscript(recording.id, updatedTranscript);
+        Haptics.impact("medium");
+      }
+    } catch (error) {
+      console.error("Translation error:", error);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -939,12 +972,35 @@ const handleSummarize = async () => {
                       </View>
                     </>
                   ) : (
-                    <HighlightedText
-                      text={recording.transcript.text}
-                      highlightWord={highlightedKeyword}
-                      textStyle={[styles.transcriptText, { color: colors.foreground }]}
-                      highlightStyle={{ backgroundColor: colors.highlight + "40", fontWeight: "600" }}
-                    />
+                    <>
+                      <HighlightedText
+                        text={recording.transcript.text}
+                        highlightWord={highlightedKeyword}
+                        textStyle={[styles.transcriptText, { color: colors.foreground }]}
+                        highlightStyle={{ backgroundColor: colors.highlight + "40", fontWeight: "600" }}
+                      />
+                      <View style={styles.translateButtonContainer}>
+                        <TouchableOpacity
+                          onPress={() => handleTranslate(recording.transcript?.language === 'ja' ? 'en' : 'ja')}
+                          disabled={translateMutation.isPending || isProcessing}
+                          style={[
+                            styles.translateButton,
+                            { backgroundColor: colors.primary, opacity: translateMutation.isPending ? 0.6 : 1 }
+                          ]}
+                        >
+                          {translateMutation.isPending ? (
+                            <ActivityIndicator color="#FFFFFF" size="small" />
+                          ) : (
+                            <>
+                              <IconSymbol name="doc.text.fill" size={16} color="#FFFFFF" />
+                              <Text style={styles.translateButtonText}>
+                                {recording.transcript?.language === 'ja' ? '英語に翻訳' : '日本語に翻訳'}
+                              </Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </>
                   )}
                 </View>
               ) : (
@@ -1826,6 +1882,23 @@ const styles = StyleSheet.create({
   transcriptText: {
     fontSize: 16,
     lineHeight: 26,
+  },
+  translateButtonContainer: {
+    marginTop: 20,
+    alignItems: "center",
+  },
+  translateButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    gap: 8,
+  },
+  translateButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
   },
   emptyTab: {
     flex: 1,
