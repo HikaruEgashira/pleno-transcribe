@@ -86,7 +86,7 @@ export class SystemAudioStream {
             channelCount: 1,
             sampleRate,
             echoCancellation: true,
-            noiseSuppression: true,
+            noiseSuppression: false,
           },
         });
 

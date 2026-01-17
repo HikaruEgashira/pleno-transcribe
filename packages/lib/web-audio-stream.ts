@@ -34,7 +34,7 @@ export class WebAudioStream {
           channelCount: 1,
           sampleRate,
           echoCancellation: true,
-          noiseSuppression: true,
+          noiseSuppression: false,
         },
       });
 
