@@ -25,6 +25,7 @@
     "@mykin-ai/expo-audio-stream": "^0.3.5",
     "@radix-ui/react-slot": "^1.2.4",
     "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-native-community/datetimepicker": "8.4.4",
     "@react-navigation/bottom-tabs": "^7.8.12",
     "@react-navigation/elements": "^2.9.2",
     "@react-navigation/native": "^7.1.25",

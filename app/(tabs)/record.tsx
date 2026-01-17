@@ -35,7 +35,9 @@ const AUDIO_SOURCE_ICONS: Record<AudioSource, string> = {
 
 export default function RecordScreen() {
   const colors = useColors();
-  const { isDesktop } = useResponsive();
+  const { isDesktop, width: screenWidth } = useResponsive();
+  // Dynamic waveform bar count: 6px bar width + 2px gap = 8px per bar, with 32px padding
+  const waveformBarCount = Math.floor((screenWidth - 72) / 8);
   const { t } = useTranslation();
   const scrollViewRef = useRef<ScrollView>(null);
   const [audioSource, setAudioSource] = useState<AudioSource>("microphone");
@@ -241,7 +243,7 @@ export default function RecordScreen() {
         {/* Waveform */}
         <View style={[styles.waveform, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}>
           <View style={styles.waveformBars}>
-            {Array.from({ length: 50 }).map((_, i) => {
+            {Array.from({ length: waveformBarCount }).map((_, i) => {
               const metering = meteringHistory[i] ?? -160;
               // -30dB〜0dBを0〜1にマッピング、pow(1.3)でコントラスト強調
               const value = Math.max(0, Math.min(1, (metering + 30) / 30));

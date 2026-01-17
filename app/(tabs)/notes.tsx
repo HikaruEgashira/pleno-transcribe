@@ -150,8 +150,6 @@ const RecordingCard = React.memo(function RecordingCard({
     );
   };
 
-  const cardWidth = columns > 1 ? `${Math.floor(100 / columns) - 2}%` as const : "100%" as const;
-
   const cardContent = (
     <TouchableOpacity
       onPress={handlePress}
@@ -162,8 +160,8 @@ const RecordingCard = React.memo(function RecordingCard({
         {
           backgroundColor: isSelected ? colors.primary + "10" : colors.surface,
           borderColor: isSelected ? colors.primary : colors.border,
-          width: cardWidth,
-          marginHorizontal: columns > 1 ? "1%" : 0,
+          flex: columns > 1 ? 1 : undefined,
+          width: columns > 1 ? undefined : "100%",
         },
       ]}
     >
@@ -612,6 +610,7 @@ export default function HomeScreen() {
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.smartFoldersContent}
+          fadingEdgeLength={40}
         >
           {smartFolders.map((folder) => {
             const count = state.recordings.filter(folder.filter).length;
@@ -1062,6 +1061,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     justifyContent: "space-between",
     alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
   },
   filterButtons: {
     flexDirection: "row",
@@ -1115,12 +1116,14 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   listContentDesktop: {
-    maxWidth: 1200,
+    maxWidth: 1400,
     alignSelf: "center",
     width: "100%",
+    paddingHorizontal: 40,
   },
   columnWrapper: {
     justifyContent: "flex-start",
+    gap: 12,
   },
   card: {
     padding: 16,
