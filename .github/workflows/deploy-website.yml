@@ -40,6 +40,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Storybook requires
+        run: npx sb-rn-get-stories -c .rnstorybook
+
       - name: Build website
         run: npx expo export --platform web
         env:
