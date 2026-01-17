@@ -21,6 +21,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const systemScheme = useSystemColorScheme();
 
   const applyScheme = useCallback((scheme: ColorScheme) => {
+    // Validate scheme before applying
+    if (scheme !== "light" && scheme !== "dark") {
+      return;
+    }
     nativewindColorScheme.set(scheme);
     Appearance.setColorScheme?.(scheme);
     if (typeof document !== "undefined") {
@@ -28,9 +32,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       root.dataset.theme = scheme;
       root.classList.toggle("dark", scheme === "dark");
       const palette = SchemeColors[scheme];
-      Object.entries(palette).forEach(([token, value]) => {
-        root.style.setProperty(`--color-${token}`, value);
-      });
+      if (palette) {
+        Object.entries(palette).forEach(([token, value]) => {
+          root.style.setProperty(`--color-${token}`, value);
+        });
+      }
     }
   }, []);
 
