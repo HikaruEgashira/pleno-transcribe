@@ -4,13 +4,14 @@ import { useRouter } from 'expo-router';
 import { useAudioRecorder, useAudioRecorderState, RecordingPresets } from 'expo-audio';
 
 import { useRecordings } from './recordings-context';
+import { useSettingsSafe } from './settings-context';
 import { useRealtimeTranscription } from '@/packages/hooks/use-realtime-transcription';
 import { useRealtimeTranslation } from '@/packages/hooks/use-realtime-translation';
 import { useBackgroundRecording } from '@/packages/hooks/use-background-recording';
 import { useRecordingDraft } from '@/packages/hooks/use-recording-draft';
 import { Recording, Highlight, RecordingDraft } from '@/packages/types/recording';
 import type { TranslationStatus } from '@/packages/types/realtime-transcription';
-import { Storage, Haptics, FileSystem, Permissions, createAudioMetering, type AudioMeteringController } from '@/packages/platform';
+import { Haptics, FileSystem, Permissions, createAudioMetering, type AudioMeteringController } from '@/packages/platform';
 
 const RECORDING_OPTIONS = {
   ...RecordingPresets.HIGH_QUALITY,
@@ -55,15 +56,18 @@ const RecordingSessionContext = createContext<RecordingSessionContextValue | nul
 export function RecordingSessionProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { addRecording, updateRealtimeTranscript, setTranscript } = useRecordings();
+  const { settings } = useSettingsSafe();
+
+  // Derive realtime settings from SettingsContext
+  const realtimeEnabled = settings.realtimeTranscription.enabled;
+  const translationEnabled = settings.realtimeTranslation.enabled;
+  const translationTargetLanguage = settings.realtimeTranslation.targetLanguage;
 
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [duration, setDuration] = useState(0);
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [realtimeEnabled, setRealtimeEnabled] = useState(false);
-  const [translationEnabled, setTranslationEnabled] = useState(false);
-  const [translationTargetLanguage, setTranslationTargetLanguage] = useState('ja');
   const [currentRecordingId, setCurrentRecordingId] = useState<string | null>(null);
   const [justCompleted, setJustCompleted] = useState(false);
   const [metering, setMetering] = useState(-160);
@@ -106,30 +110,6 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
 
   // Auto-save draft hook
   const { startAutoSave, stopAutoSave, loadDraft, clearDraft } = useRecordingDraft();
-
-  // Load settings
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const saved = await Storage.getItem('app-settings');
-        console.log('[RecordingSession] Loaded settings:', saved);
-        if (saved) {
-          const settings = JSON.parse(saved);
-          console.log('[RecordingSession] Parsed settings:', {
-            realtimeEnabled: settings.realtimeTranscription?.enabled,
-            translationEnabled: settings.realtimeTranslation?.enabled,
-            targetLanguage: settings.realtimeTranslation?.targetLanguage,
-          });
-          setRealtimeEnabled(settings.realtimeTranscription?.enabled || false);
-          setTranslationEnabled(settings.realtimeTranslation?.enabled || false);
-          setTranslationTargetLanguage(settings.realtimeTranslation?.targetLanguage || 'ja');
-        }
-      } catch (error) {
-        console.error('Failed to load settings:', error);
-      }
-    };
-    loadSettings();
-  }, []);
 
   // Request microphone permission
   useEffect(() => {

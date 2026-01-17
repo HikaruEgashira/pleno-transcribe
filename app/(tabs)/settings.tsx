@@ -21,40 +21,16 @@ import { useThemeContext } from "@/packages/lib/theme-provider";
 import { useTranslation } from "@/packages/lib/i18n/context";
 import { trpc } from "@/packages/lib/trpc";
 import { useWhisperModel } from "@/packages/hooks/use-whisper-model";
+import { useSettings, type Language, type TranscriptionProvider } from "@/packages/lib/settings-context";
 import type { WhisperModelSize } from "@/packages/lib/whisper/whisper-types";
 
 type SummaryTemplate = "general" | "meeting" | "interview" | "lecture" | string;
-type Language = "ja" | "en" | "auto";
-type TranscriptionProvider = "elevenlabs" | "gemini" | "whisper-local";
 
 interface CustomTemplate {
   id: string;
   name: string;
   prompt: string;
   createdAt: Date;
-}
-
-interface SettingsState {
-  language: Language;
-  summaryTemplate: SummaryTemplate;
-  autoTranscribe: boolean;
-  autoSummarize: boolean;
-  autoSentiment: boolean;
-  autoKeywords: boolean;
-  transcriptionProvider: TranscriptionProvider;
-  realtimeTranscription: {
-    enabled: boolean;
-    language: string;
-    enableSpeakerDiarization: boolean;
-  };
-  realtimeTranslation: {
-    enabled: boolean;
-    targetLanguage: string;
-  };
-  whisperSettings: {
-    modelSize: WhisperModelSize;
-    useWebGPU: boolean;
-  };
 }
 
 const LANGUAGES: { value: Language; label: string }[] = [
@@ -89,29 +65,7 @@ export default function SettingsScreen() {
   const { state: recordingsState, addRecording } = useRecordings();
   const { colorScheme, setColorScheme } = useThemeContext();
   const { t } = useTranslation();
-
-  const [settings, setSettings] = useState<SettingsState>({
-    language: "auto",
-    summaryTemplate: "general",
-    autoTranscribe: true,
-    autoSummarize: true,
-    autoSentiment: false,
-    autoKeywords: false,
-    transcriptionProvider: "elevenlabs",
-    realtimeTranscription: {
-      enabled: true,
-      language: "ja",
-      enableSpeakerDiarization: true,
-    },
-    realtimeTranslation: {
-      enabled: false,
-      targetLanguage: "ja",
-    },
-    whisperSettings: {
-      modelSize: "distil-small",
-      useWebGPU: true,
-    },
-  });
+  const { settings, updateSettings, updateNestedSettings } = useSettings();
 
   const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>([]);
   const [showTemplateForm, setShowTemplateForm] = useState(false);
@@ -127,79 +81,43 @@ export default function SettingsScreen() {
     isSupported: isWhisperSupported,
   } = useWhisperModel();
 
-  // Load settings and custom templates on mount
+  // Load custom templates on mount
   useEffect(() => {
-    const loadSettings = async () => {
+    const loadCustomTemplates = async () => {
       try {
-        const saved = await Storage.getItem(SETTINGS_KEY);
-        if (saved) {
-          const savedSettings = JSON.parse(saved);
-          // Merge with default settings to handle missing fields
-          setSettings((prev) => ({
-            ...prev,
-            ...savedSettings,
-            realtimeTranscription: {
-              ...prev.realtimeTranscription,
-              ...(savedSettings.realtimeTranscription || {}),
-            },
-            realtimeTranslation: {
-              ...prev.realtimeTranslation,
-              ...(savedSettings.realtimeTranslation || {}),
-            },
-            whisperSettings: {
-              ...prev.whisperSettings,
-              ...(savedSettings.whisperSettings || {}),
-            },
-          }));
-        }
-
-        // Load custom templates
         const savedTemplates = await Storage.getItem(CUSTOM_TEMPLATES_KEY);
         if (savedTemplates) {
           const templates: CustomTemplate[] = JSON.parse(savedTemplates);
-          // Parse dates
           setCustomTemplates(templates.map(t => ({
             ...t,
             createdAt: new Date(t.createdAt),
           })));
         }
       } catch (error) {
-        console.error("Failed to load settings:", error);
+        console.error("Failed to load custom templates:", error);
       }
     };
-    loadSettings();
+    loadCustomTemplates();
   }, []);
-
-  // Save settings whenever they change
-  useEffect(() => {
-    const saveSettings = async () => {
-      try {
-        await Storage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-      } catch (error) {
-        console.error("Failed to save settings:", error);
-      }
-    };
-    saveSettings();
-  }, [settings]);
 
   const handleLanguageChange = (language: Language) => {
     Haptics.impact('light');
-    setSettings((prev) => ({ ...prev, language }));
+    updateSettings({ language });
   };
 
   const handleTemplateChange = (template: SummaryTemplate) => {
     Haptics.impact('light');
-    setSettings((prev) => ({ ...prev, summaryTemplate: template }));
+    updateSettings({ summaryTemplate: template });
   };
 
   const handleProviderChange = (provider: TranscriptionProvider) => {
     Haptics.impact('light');
-    setSettings((prev) => ({ ...prev, transcriptionProvider: provider }));
+    updateSettings({ transcriptionProvider: provider });
   };
 
   const handleToggle = (key: "autoTranscribe" | "autoSummarize" | "autoSentiment" | "autoKeywords") => {
     Haptics.impact('light');
-    setSettings((prev) => ({ ...prev, [key]: !prev[key] }));
+    updateSettings({ [key]: !settings[key] });
   };
 
   const handleClearData = async () => {
@@ -691,13 +609,7 @@ export default function SettingsScreen() {
                 key={model.id}
                 onPress={() => {
                   Haptics.impact('light');
-                  setSettings((prev) => ({
-                    ...prev,
-                    whisperSettings: {
-                      ...prev.whisperSettings,
-                      modelSize: model.id,
-                    },
-                  }));
+                  updateNestedSettings('whisperSettings', { modelSize: model.id });
                 }}
                 style={[
                   styles.templateItem,
@@ -1023,13 +935,9 @@ export default function SettingsScreen() {
               value={settings.realtimeTranscription.enabled}
               onValueChange={() => {
                 Haptics.impact('light');
-                setSettings((prev) => ({
-                  ...prev,
-                  realtimeTranscription: {
-                    ...prev.realtimeTranscription,
-                    enabled: !prev.realtimeTranscription.enabled,
-                  },
-                }));
+                updateNestedSettings('realtimeTranscription', {
+                  enabled: !settings.realtimeTranscription.enabled,
+                });
               }}
               trackColor={{ false: colors.border, true: colors.primary }}
               thumbColor="#FFFFFF"
@@ -1048,14 +956,9 @@ export default function SettingsScreen() {
                   value={settings.realtimeTranscription.enableSpeakerDiarization}
                   onValueChange={() => {
                     Haptics.impact('light');
-                    setSettings((prev) => ({
-                      ...prev,
-                      realtimeTranscription: {
-                        ...prev.realtimeTranscription,
-                        enableSpeakerDiarization:
-                          !prev.realtimeTranscription.enableSpeakerDiarization,
-                      },
-                    }));
+                    updateNestedSettings('realtimeTranscription', {
+                      enableSpeakerDiarization: !settings.realtimeTranscription.enableSpeakerDiarization,
+                    });
                   }}
                   trackColor={{ false: colors.border, true: colors.primary }}
                   thumbColor="#FFFFFF"
@@ -1090,13 +993,9 @@ export default function SettingsScreen() {
                 value={settings.realtimeTranslation.enabled}
                 onValueChange={() => {
                   Haptics.impact('light');
-                  setSettings((prev) => ({
-                    ...prev,
-                    realtimeTranslation: {
-                      ...prev.realtimeTranslation,
-                      enabled: !prev.realtimeTranslation.enabled,
-                    },
-                  }));
+                  updateNestedSettings('realtimeTranslation', {
+                    enabled: !settings.realtimeTranslation.enabled,
+                  });
                 }}
                 trackColor={{ false: colors.border, true: colors.primary }}
                 thumbColor="#FFFFFF"
@@ -1112,13 +1011,7 @@ export default function SettingsScreen() {
                     key={lang.value}
                     onPress={() => {
                       Haptics.impact('light');
-                      setSettings((prev) => ({
-                        ...prev,
-                        realtimeTranslation: {
-                          ...prev.realtimeTranslation,
-                          targetLanguage: lang.value,
-                        },
-                      }));
+                      updateNestedSettings('realtimeTranslation', { targetLanguage: lang.value });
                     }}
                     style={[
                       styles.templateItem,

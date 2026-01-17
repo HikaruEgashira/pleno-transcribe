@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Text,
   View,
@@ -14,10 +14,11 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAudioPlayer, setAudioModeAsync } from "expo-audio";
 
 import { ScreenContainer } from "@/packages/components/screen-container";
-import { Haptics, Storage, FileSystem } from "@/packages/platform";
+import { Haptics, FileSystem } from "@/packages/platform";
 import { IconSymbol } from "@/packages/components/ui/icon-symbol";
 import { useRecordings } from "@/packages/lib/recordings-context";
 import { useColors } from "@/packages/hooks/use-colors";
+import { useSettings } from "@/packages/lib/settings-context";
 import { QAMessage } from "@/packages/types/recording";
 import { trpc } from "@/packages/lib/trpc";
 import { GlobalRecordingBar } from "@/packages/components/global-recording-bar";
@@ -69,13 +70,13 @@ export default function NoteDetailScreen() {
   const router = useRouter();
   const colors = useColors();
   const { getRecording, updateRecording, setTranscript, setSummary, addQAMessage, addHighlight } = useRecordings();
+  const { settings } = useSettings();
 
   const [activeTab, setActiveTab] = useState<TabType>("audio");
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [qaInput, setQaInput] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [transcriptionProvider, setTranscriptionProvider] = useState<"elevenlabs" | "gemini">("gemini");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
   const [editingActionItemId, setEditingActionItemId] = useState<string | null>(null);
@@ -88,79 +89,86 @@ export default function NoteDetailScreen() {
   const recording = getRecording(id || "");
   const player = useAudioPlayer(recording?.audioUri || "");
 
-  // Load transcription provider from settings and handle auto-processing
-  useEffect(() => {
-    const loadProvider = async () => {
-      try {
-        const saved = await Storage.getItem("app-settings");
-        if (saved) {
-          const settings = JSON.parse(saved);
-          if (settings.transcriptionProvider) {
-            setTranscriptionProvider(settings.transcriptionProvider);
-          }
+  // Track if auto-processing has been triggered to prevent duplicate calls
+  const autoProcessedRef = useRef<{ transcribe: boolean; summarize: boolean; keywords: boolean; sentiment: boolean }>({
+    transcribe: false,
+    summarize: false,
+    keywords: false,
+    sentiment: false,
+  });
 
-          // Auto transcribe if enabled and not already transcribed
-          if (settings.autoTranscribe && recording && !recording.transcript && !isProcessing) {
-            console.log("[Auto] Starting auto-transcription");
-            handleTranscribe();
-          }
-        }
-      } catch (error) {
-        console.error("Failed to load transcription provider:", error);
-      }
+  // Reset auto-processed flags when recording changes
+  useEffect(() => {
+    autoProcessedRef.current = {
+      transcribe: false,
+      summarize: false,
+      keywords: false,
+      sentiment: false,
     };
-    loadProvider();
+  }, [recording?.id]);
+
+  // Auto transcribe if enabled and not already transcribed
+  useEffect(() => {
+    if (
+      settings.autoTranscribe &&
+      recording &&
+      !recording.transcript &&
+      !isProcessing &&
+      !autoProcessedRef.current.transcribe
+    ) {
+      console.log("[Auto] Starting auto-transcription");
+      autoProcessedRef.current.transcribe = true;
+      handleTranscribe();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recording?.id]); // Re-run only when recording ID changes to avoid infinite loops
+  }, [recording?.id, settings.autoTranscribe]);
 
   // Auto summarize when transcription completes
   useEffect(() => {
-    const autoSummarize = async () => {
-      try {
-        const saved = await Storage.getItem("app-settings");
-        if (saved) {
-          const settings = JSON.parse(saved);
-          // Auto summarize if enabled, transcription exists, and summary doesn't exist yet
-          if (settings.autoSummarize && recording && recording.transcript && !recording.summary && !isProcessing) {
-            console.log("[Auto] Starting auto-summarization");
-            handleSummarize();
-          }
-        }
-      } catch (error) {
-        console.error("Failed to auto-summarize:", error);
-      }
-    };
-    autoSummarize();
+    if (
+      settings.autoSummarize &&
+      recording &&
+      recording.transcript &&
+      !recording.summary &&
+      !isProcessing &&
+      !autoProcessedRef.current.summarize
+    ) {
+      console.log("[Auto] Starting auto-summarization");
+      autoProcessedRef.current.summarize = true;
+      handleSummarize();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recording?.transcript]); // Re-run only when transcript changes to avoid infinite loops
+  }, [recording?.transcript, settings.autoSummarize]);
 
   // Auto keywords and sentiment when summary completes
   useEffect(() => {
-    const autoProcess = async () => {
-      try {
-        const saved = await Storage.getItem("app-settings");
-        if (saved && recording && recording.summary && recording.transcript) {
-          const settings = JSON.parse(saved);
-
-          // Auto keywords extraction if enabled and not already extracted
-          if (settings.autoKeywords && recording.keywords.length === 0 && !isProcessing) {
-            console.log("[Auto] Starting auto-keyword extraction");
-            handleExtractKeywords();
-          }
-
-          // Auto sentiment analysis if enabled and not already analyzed
-          if (settings.autoSentiment && !recording.sentiment && !isProcessing) {
-            console.log("[Auto] Starting auto-sentiment analysis");
-            handleAnalyzeSentiment();
-          }
-        }
-      } catch (error) {
-        console.error("Failed to auto-process:", error);
+    if (recording && recording.summary && recording.transcript) {
+      // Auto keywords extraction if enabled and not already extracted
+      if (
+        settings.autoKeywords &&
+        recording.keywords.length === 0 &&
+        !isProcessing &&
+        !autoProcessedRef.current.keywords
+      ) {
+        console.log("[Auto] Starting auto-keyword extraction");
+        autoProcessedRef.current.keywords = true;
+        handleExtractKeywords();
       }
-    };
-    autoProcess();
+
+      // Auto sentiment analysis if enabled and not already analyzed
+      if (
+        settings.autoSentiment &&
+        !recording.sentiment &&
+        !isProcessing &&
+        !autoProcessedRef.current.sentiment
+      ) {
+        console.log("[Auto] Starting auto-sentiment analysis");
+        autoProcessedRef.current.sentiment = true;
+        handleAnalyzeSentiment();
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recording?.summary]); // Re-run only when summary changes to avoid infinite loops
+  }, [recording?.summary, settings.autoKeywords, settings.autoSentiment]);
 
   // Transcription mutation
   const transcribeMutation = trpc.ai.transcribe.useMutation();
@@ -324,12 +332,15 @@ export default function NoteDetailScreen() {
 
       console.log("[Transcribe] Sending to API with base64 length:", audioBase64.length);
 
+      // whisper-local is handled separately, fallback to gemini for API call
+      const apiProvider = settings.transcriptionProvider === "whisper-local" ? "gemini" : settings.transcriptionProvider;
+
       const result = await transcribeMutation.mutateAsync({
         audioBase64,
         filename,
         languageCode: "ja",
-        diarize: transcriptionProvider === "elevenlabs",
-        provider: transcriptionProvider,
+        diarize: settings.transcriptionProvider === "elevenlabs",
+        provider: apiProvider,
       });
 
       console.log("[Transcribe] Result:", result);
@@ -1059,7 +1070,7 @@ const handleSummarize = async () => {
                     文字起こしがまだありません
                   </Text>
                   <Text style={[styles.providerHint, { color: colors.muted }]}>
-                    プロバイダ: {transcriptionProvider === "gemini" ? "Gemini" : "ElevenLabs"}
+                    プロバイダ: {settings.transcriptionProvider === "gemini" ? "Gemini" : "ElevenLabs"}
                   </Text>
                   <TouchableOpacity
                     onPress={handleTranscribe}

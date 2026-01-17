@@ -1,0 +1,100 @@
+appId: host.exp.exponent
+---
+# Settings Persistence Test - ダークモード永続化と設定即時反映のテスト
+
+# === Phase 1: Initial Setup ===
+- launchApp
+
+- waitForAnimationToEnd:
+    timeout: 10000
+
+- tapOn:
+    text: "VoiceKeep"
+
+- waitForAnimationToEnd:
+    timeout: 15000
+
+# === Phase 2: Navigate to Settings and Enable Dark Mode ===
+- tapOn:
+    text: "設定"
+
+- waitForAnimationToEnd
+
+- takeScreenshot: settings-before-dark-mode
+
+# Scroll to find Dark Mode toggle
+- scrollUntilVisible:
+    element:
+      text: "ダークモード"
+
+# Toggle Dark Mode ON
+- tapOn:
+    text: "ダークモード"
+
+- waitForAnimationToEnd:
+    timeout: 2000
+
+- takeScreenshot: settings-dark-mode-enabled
+
+# === Phase 3: Verify Settings Immediate Reflection ===
+# Navigate away and back to verify settings persist in memory
+
+- tapOn:
+    text: "ノート"
+
+- waitForAnimationToEnd
+
+- takeScreenshot: notes-with-dark-mode
+
+# Go back to settings
+- tapOn:
+    text: "設定"
+
+- waitForAnimationToEnd
+
+# Verify dark mode is still enabled (UI should be dark)
+- takeScreenshot: settings-dark-mode-still-enabled
+
+# === Phase 4: Test Auto-Transcribe Setting ===
+- scrollUntilVisible:
+    element:
+      text: "自動処理"
+
+# Toggle auto-transcribe
+- tapOn:
+    text: "自動文字起こし"
+
+- waitForAnimationToEnd:
+    timeout: 1000
+
+- takeScreenshot: auto-transcribe-toggled
+
+# === Phase 5: Restart App and Verify Persistence ===
+- stopApp
+
+- launchApp
+
+- waitForAnimationToEnd:
+    timeout: 10000
+
+- tapOn:
+    text: "VoiceKeep"
+
+- waitForAnimationToEnd:
+    timeout: 15000
+
+# Navigate to settings
+- tapOn:
+    text: "設定"
+
+- waitForAnimationToEnd
+
+# Take screenshot to verify dark mode persisted after restart
+- takeScreenshot: settings-after-restart
+
+# Scroll to dark mode
+- scrollUntilVisible:
+    element:
+      text: "ダークモード"
+
+- takeScreenshot: dark-mode-persisted
