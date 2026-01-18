@@ -399,8 +399,12 @@ export function useRealtimeTranscription() {
 
       await client.connect(token, connectionOptions);
 
-      // 音声ストリーミングを開始
-      await startAudioStreaming();
+      // 音声ストリーミングを開始（skipAudioStreamingが指定されている場合はスキップ）
+      if (!options.skipAudioStreaming) {
+        await startAudioStreaming();
+      } else {
+        console.log("[useRealtimeTranscription] Skipping internal audio streaming (external audio source will be used)");
+      }
 
       console.log("[useRealtimeTranscription] Session started successfully");
     } catch (error) {

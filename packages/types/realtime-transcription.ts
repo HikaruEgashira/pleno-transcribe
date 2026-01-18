@@ -17,6 +17,8 @@ export interface RealtimeOptions {
     /** 最小音声継続時間（秒） */
     minSpeechDurationSecs?: number;
   };
+  /** 内部マイクストリーミングをスキップ（外部から音声を送信する場合） */
+  skipAudioStreaming?: boolean;
 }
 
 /**

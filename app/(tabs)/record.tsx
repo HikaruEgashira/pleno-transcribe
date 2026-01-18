@@ -364,7 +364,7 @@ export default function RecordScreen() {
         {!isRecording && (
           <View style={styles.controls}>
             <TouchableOpacity
-              onPress={startRecording}
+              onPress={() => startRecording(audioSource)}
               style={[styles.recordButton, { backgroundColor: colors.primary }]}
               activeOpacity={0.8}
             >

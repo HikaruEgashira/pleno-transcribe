@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
-import { Alert, Animated } from 'react-native';
+import { Alert, Animated, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAudioRecorder, useAudioRecorderState, RecordingPresets } from 'expo-audio';
 
@@ -12,6 +12,7 @@ import { useRecordingDraft } from '@/packages/hooks/use-recording-draft';
 import { Recording, Highlight, RecordingDraft } from '@/packages/types/recording';
 import type { TranslationStatus } from '@/packages/types/realtime-transcription';
 import { Haptics, FileSystem, Permissions, createAudioMetering, type AudioMeteringController } from '@/packages/platform';
+import { SystemAudioStream, type AudioSource } from './system-audio-stream';
 
 const RECORDING_OPTIONS = {
   ...RecordingPresets.HIGH_QUALITY,
@@ -40,7 +41,7 @@ interface RecordingSessionContextValue {
   getTranslation: (segmentId: string) => string | undefined;
   getTranslationStatus: (segmentId: string) => TranslationStatus | undefined;
   isTranslating: boolean;
-  startRecording: () => Promise<void>;
+  startRecording: (audioSource?: AudioSource) => Promise<void>;
   pauseResume: () => Promise<void>;
   stopRecording: () => Promise<void>;
   cancelRecording: () => Promise<void>;
@@ -74,6 +75,7 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const audioMeteringRef = useRef<AudioMeteringController | null>(null);
+  const systemAudioStreamRef = useRef<SystemAudioStream | null>(null);
 
   const audioRecorder = useAudioRecorder(RECORDING_OPTIONS);
   const [meteringHistory, setMeteringHistory] = useState<number[]>([]);
@@ -83,6 +85,7 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
     state: realtimeState,
     startSession: startRealtimeSession,
     stopSession: stopRealtimeSession,
+    sendAudioChunk,
     consolidateSegments,
     mergedSegments,
     soundLevel: realtimeSoundLevel,
@@ -217,24 +220,30 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
     }
   }, [currentRecordingId, realtimeState.segments, updateRealtimeTranscript]);
 
-  const startRecording = useCallback(async () => {
+  const startRecording = useCallback(async (audioSource: AudioSource = 'microphone') => {
     if (isStartingRef.current || isRecording) {
       console.log('Recording already in progress or starting, skipping');
       return;
     }
     isStartingRef.current = true;
 
-    // 権限リクエスト
-    const status = await Permissions.requestMicrophonePermission();
-    if (status !== 'granted') {
-      isStartingRef.current = false;
-      Alert.alert('マイク権限が必要です', '設定からマイクへのアクセスを許可してください');
-      return;
+    // システム音声を使用するかどうか
+    const useSystemAudio = Platform.OS === 'web' && audioSource !== 'microphone';
+
+    // 権限リクエスト（マイクのみの場合、またはbothモードの場合）
+    if (!useSystemAudio || audioSource === 'both') {
+      const status = await Permissions.requestMicrophonePermission();
+      if (status !== 'granted') {
+        isStartingRef.current = false;
+        Alert.alert('マイク権限が必要です', '設定からマイクへのアクセスを許可してください');
+        return;
+      }
     }
 
     await Haptics.impact('medium');
 
     try {
+      // マイク録音を開始（音声ファイル保存用）
       await audioRecorder.prepareToRecordAsync();
       audioRecorder.record();
       setIsRecording(true);
@@ -261,7 +270,10 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
         realtimeEnabled,
         translationEnabled,
         translationTargetLanguage,
+        audioSource,
+        useSystemAudio,
       });
+
       if (realtimeEnabled) {
         try {
           if (translationEnabled) {
@@ -269,22 +281,49 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
             clearTranslationCache();
           }
           console.log('[RecordingSession] Starting realtime session with translation:', translationEnabled);
-          await startRealtimeSession(recordingId, {}, {
+
+          // システム音声の場合はsendAudioChunkを使用するため、内部マイクをスキップ
+          await startRealtimeSession(recordingId, {
+            skipAudioStreaming: useSystemAudio,
+          }, {
             onPartial: translationEnabled ? translatePartial : undefined,
             onCommitted: translationEnabled ? translateCommitted : undefined,
           });
+
+          // システム音声の場合はSystemAudioStreamを開始
+          if (useSystemAudio) {
+            console.log('[RecordingSession] Starting SystemAudioStream for:', audioSource);
+            const systemStream = new SystemAudioStream();
+            systemAudioStreamRef.current = systemStream;
+
+            await systemStream.start(audioSource, (base64Audio) => {
+              sendAudioChunk(base64Audio, 16000);
+            });
+            console.log('[RecordingSession] SystemAudioStream started');
+          }
+
           console.log('Realtime transcription session started');
         } catch (error) {
           console.error('Failed to start realtime session:', error);
+          // SystemAudioStreamが開始されていた場合はクリーンアップ
+          if (systemAudioStreamRef.current) {
+            systemAudioStreamRef.current.stop();
+            systemAudioStreamRef.current = null;
+          }
         }
       }
       isStartingRef.current = false;
     } catch (error) {
       console.error('Failed to start recording:', error);
       isStartingRef.current = false;
+      // SystemAudioStreamが開始されていた場合はクリーンアップ
+      if (systemAudioStreamRef.current) {
+        systemAudioStreamRef.current.stop();
+        systemAudioStreamRef.current = null;
+      }
       Alert.alert('エラー', '録音を開始できませんでした');
     }
-  }, [audioRecorder, realtimeEnabled, translationEnabled, startRealtimeSession, translatePartial, translateCommitted, clearTranslationCache, isRecording]);
+  }, [audioRecorder, realtimeEnabled, translationEnabled, startRealtimeSession, translatePartial, translateCommitted, clearTranslationCache, isRecording, sendAudioChunk]);
 
   const pauseResume = useCallback(async () => {
     await Haptics.impact('light');
@@ -307,6 +346,13 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
 
     // 自動保存を停止
     stopAutoSave();
+
+    // SystemAudioStreamを停止
+    if (systemAudioStreamRef.current) {
+      console.log('[RecordingSession] Stopping SystemAudioStream');
+      systemAudioStreamRef.current.stop();
+      systemAudioStreamRef.current = null;
+    }
 
     try {
       if (realtimeEnabled && currentRecordingId) {
@@ -459,6 +505,13 @@ export function RecordingSessionProvider({ children }: { children: React.ReactNo
 
     // 自動保存を停止
     stopAutoSave();
+
+    // SystemAudioStreamを停止
+    if (systemAudioStreamRef.current) {
+      console.log('[RecordingSession] Stopping SystemAudioStream (cancel)');
+      systemAudioStreamRef.current.stop();
+      systemAudioStreamRef.current = null;
+    }
 
     try {
       if (realtimeEnabled && currentRecordingId) {
